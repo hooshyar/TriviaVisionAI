@@ -66,24 +66,42 @@ GEMINI_MODELS = [
 def get_screen_scale_factor():
     """Get the screen scale factor for Retina/HiDPI displays"""
     try:
-        # Create a temporary root window to get scale factor
-        temp_root = tk.Tk()
-        temp_root.withdraw()
+        if IS_MAC and MSS_AVAILABLE:
+            # On macOS, compare tkinter's logical pixels with mss's physical pixels
+            temp_root = tk.Tk()
+            temp_root.withdraw()
 
-        # On macOS, tk scaling gives us the scale factor
-        if IS_MAC:
-            # macOS Retina displays typically have 2.0 scale factor
-            scale = temp_root.tk.call('tk', 'scaling')
-            # Convert to integer scale factor (1, 2, or 3)
-            scale_factor = round(scale / 72.0) if scale > 100 else 1
+            # Get logical screen dimensions from tkinter
+            logical_width = temp_root.winfo_screenwidth()
+            logical_height = temp_root.winfo_screenheight()
+            temp_root.destroy()
+
+            # Get physical pixel dimensions from mss
+            with mss() as sct:
+                monitor = sct.monitors[1]  # Primary monitor (index 0 is all monitors)
+                physical_width = monitor['width']
+                physical_height = monitor['height']
+
+            # Calculate scale factor (usually 1.0 or 2.0 on Mac)
+            scale_width = physical_width / logical_width
+            scale_height = physical_height / logical_height
+
+            # Use the average and round to nearest integer
+            scale_factor = round((scale_width + scale_height) / 2)
+
+            print(f"Detected screen: {logical_width}x{logical_height} logical, {physical_width}x{physical_height} physical")
+            return max(1, scale_factor)
+        elif IS_MAC:
+            # Fallback for macOS without mss - assume Retina
+            print("Warning: mss not available, assuming 2x Retina display")
+            return 2
         else:
-            # For Windows/Linux, check DPI awareness
-            scale_factor = 1
-
-        temp_root.destroy()
-        return max(1, scale_factor)
+            # Windows/Linux - no scaling for now
+            return 1
     except Exception as e:
         print(f"Could not detect scale factor: {e}")
+        if IS_MAC:
+            return 2  # Safe default for macOS
         return 1
 
 
@@ -612,17 +630,17 @@ class RegionSelector:
         self.screen_width = self.root.winfo_screenwidth()
         self.screen_height = self.root.winfo_screenheight()
 
-        # Platform-specific fullscreen setup
+        # Platform-specific fullscreen setup with more transparency for better visibility
         if IS_MAC:
             # macOS-specific fullscreen handling
             self.root.attributes('-fullscreen', True)
-            self.root.attributes('-alpha', 0.3)
+            self.root.attributes('-alpha', 0.15)  # More transparent on Mac
             # Ensure window is on top
             self.root.attributes('-topmost', True)
         else:
             # Windows/Linux fullscreen
             self.root.attributes('-fullscreen', True)
-            self.root.attributes('-alpha', 0.3)
+            self.root.attributes('-alpha', 0.2)  # More transparent
             self.root.attributes('-topmost', True)
 
         self.root.configure(bg='black')
@@ -631,13 +649,13 @@ class RegionSelector:
         self.canvas = tk.Canvas(self.root, cursor="cross", bg='grey', highlightthickness=0)
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
-        # Instruction label
+        # Instruction label - more helpful for seamless workflow
         self.instruction_label = tk.Label(
             self.root,
-            text="Click and drag to select region. Press ESC to cancel.",
-            font=('Arial', 16, 'bold'),
+            text="Drag to select the trivia question area on your screen • ESC to cancel",
+            font=('Arial', 14, 'bold'),
             bg='black',
-            fg='white'
+            fg='#1abc9c'
         )
         self.instruction_label.place(relx=0.5, rely=0.05, anchor='center')
 
@@ -776,8 +794,9 @@ class RegionSelector:
 
         # Update instruction
         self.instruction_label.config(
-            text="Drag to move • Drag corners/edges to resize • Click button to confirm",
-            fg='#1abc9c'
+            text="✓ Drag box to move • Drag corners to resize • Click 'Confirm' when ready",
+            fg='#1abc9c',
+            font=('Arial', 13, 'bold')
         )
 
         # Show buttons
@@ -1013,9 +1032,31 @@ class TriviaVisionAI:
 
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("TriviaVision AI - Desktop Trivia Helper (Parallel AI)")
-        self.root.geometry("1000x850")
+        self.root.title("TriviaVision AI")
+
+        # Compact window size for seamless left-side positioning
+        window_width = 500
+        window_height = 750
+
+        # Position on the left side of the screen
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        # Position at left side with small margin
+        x_position = 20
+        y_position = (screen_height - window_height) // 2  # Vertically centered
+
+        self.root.geometry(f"{window_width}x{window_height}+{x_position}+{y_position}")
         self.root.configure(bg='#2c3e50')
+
+        # Make window stay on top (optional, but helpful for workflow)
+        if IS_MAC:
+            # On Mac, use a lighter touch - not always on top, but easy to access
+            pass
+        else:
+            # On Windows/Linux, might want to keep it on top
+            # self.root.attributes('-topmost', True)
+            pass
 
         self.preview_running = False
         self.preview_image_label = None
@@ -1061,14 +1102,14 @@ class TriviaVisionAI:
     def setup_ui(self):
         """Setup the user interface"""
 
-        # Title
-        title_frame = tk.Frame(self.root, bg='#34495e', pady=15)
+        # Compact Title
+        title_frame = tk.Frame(self.root, bg='#34495e', pady=10)
         title_frame.pack(fill=tk.X)
 
         title_label = tk.Label(
             title_frame,
             text="🎯 TriviaVision AI",
-            font=('Arial', 24, 'bold'),
+            font=('Arial', 16, 'bold'),
             bg='#34495e',
             fg='#ecf0f1'
         )
@@ -1076,56 +1117,56 @@ class TriviaVisionAI:
 
         subtitle_label = tk.Label(
             title_frame,
-            text="Desktop Trivia Screenshot Assistant",
-            font=('Arial', 12),
+            text="Trivia Screenshot Assistant",
+            font=('Arial', 9),
             bg='#34495e',
             fg='#bdc3c7'
         )
         subtitle_label.pack()
 
-        # Preview Frame
+        # Preview Frame - Compact
         preview_frame = tk.LabelFrame(
             self.root,
-            text="Live Preview of Selected Region",
-            font=('Arial', 12, 'bold'),
+            text="Live Preview",
+            font=('Arial', 10, 'bold'),
             bg='#34495e',
             fg='#ecf0f1',
-            padx=10,
-            pady=10
+            padx=5,
+            pady=5
         )
-        preview_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        preview_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
         self.preview_image_label = tk.Label(
             preview_frame,
-            text="No region selected\n\nClick 'Select Region' to choose the area of your screen\nwhere trivia questions appear",
-            font=('Arial', 14),
+            text="No region selected\n\nClick 'Select Region'\nto choose screen area",
+            font=('Arial', 10),
             bg='#2c3e50',
             fg='#95a5a6',
-            width=60,
-            height=15
+            width=40,
+            height=8
         )
         self.preview_image_label.pack(expand=True)
 
-        # AI Responses Frame - Split into two columns
+        # AI Responses Frame - Stacked vertically for compact layout
         responses_main_frame = tk.Frame(self.root, bg='#2c3e50')
-        responses_main_frame.pack(fill=tk.BOTH, padx=20, pady=10, expand=True)
+        responses_main_frame.pack(fill=tk.BOTH, padx=10, pady=5, expand=True)
 
-        # OpenAI Response Frame (Left)
+        # OpenAI Response Frame
         openai_frame = tk.LabelFrame(
             responses_main_frame,
-            text="🤖 OpenAI (gpt-4o-mini)",
-            font=('Arial', 11, 'bold'),
+            text="🤖 OpenAI",
+            font=('Arial', 9, 'bold'),
             bg='#34495e',
             fg='#10a37f',
-            padx=10,
-            pady=10
+            padx=5,
+            pady=5
         )
-        openai_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        openai_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 3))
 
         self.openai_text = tk.Text(
             openai_frame,
-            height=8,
-            font=('Arial', 10),
+            height=4,
+            font=('Arial', 9),
             bg='#1e2a38',
             fg='#ecf0f1',
             wrap=tk.WORD,
@@ -1133,22 +1174,22 @@ class TriviaVisionAI:
         )
         self.openai_text.pack(fill=tk.BOTH, expand=True)
 
-        # Gemini Response Frame (Right)
+        # Gemini Response Frame
         gemini_frame = tk.LabelFrame(
             responses_main_frame,
-            text="✨ Gemini (gemini-2.0-flash-exp)",
-            font=('Arial', 11, 'bold'),
+            text="✨ Gemini",
+            font=('Arial', 9, 'bold'),
             bg='#34495e',
             fg='#4285f4',
-            padx=10,
-            pady=10
+            padx=5,
+            pady=5
         )
-        gemini_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0))
+        gemini_frame.pack(fill=tk.BOTH, expand=True, pady=(3, 0))
 
         self.gemini_text = tk.Text(
             gemini_frame,
-            height=8,
-            font=('Arial', 10),
+            height=4,
+            font=('Arial', 9),
             bg='#1e2a38',
             fg='#ecf0f1',
             wrap=tk.WORD,
@@ -1156,22 +1197,22 @@ class TriviaVisionAI:
         )
         self.gemini_text.pack(fill=tk.BOTH, expand=True)
 
-        # Combined Status Frame
+        # Combined Status Frame - Compact
         status_frame = tk.LabelFrame(
             self.root,
             text="📊 Status",
-            font=('Arial', 11, 'bold'),
+            font=('Arial', 9, 'bold'),
             bg='#34495e',
             fg='#ecf0f1',
-            padx=10,
-            pady=10
+            padx=5,
+            pady=5
         )
-        status_frame.pack(fill=tk.X, padx=20, pady=10)
+        status_frame.pack(fill=tk.X, padx=10, pady=5)
 
         self.status_text = tk.Text(
             status_frame,
             height=2,
-            font=('Arial', 9),
+            font=('Arial', 8),
             bg='#1e2a38',
             fg='#95a5a6',
             wrap=tk.WORD,
@@ -1179,62 +1220,62 @@ class TriviaVisionAI:
         )
         self.status_text.pack(fill=tk.BOTH, expand=True)
 
-        # Control Buttons Frame
-        button_frame = tk.Frame(self.root, bg='#2c3e50', pady=10)
-        button_frame.pack(fill=tk.X, padx=20)
+        # Control Buttons Frame - Vertical stacking for compact layout
+        button_frame = tk.Frame(self.root, bg='#2c3e50', pady=5)
+        button_frame.pack(fill=tk.X, padx=10)
 
         # Select Region Button
         self.select_button = tk.Button(
             button_frame,
             text="📐 Select Region",
             command=self.select_region,
-            font=('Arial', 11, 'bold'),
+            font=('Arial', 10, 'bold'),
             bg='#3498db',
             fg='white',
-            padx=15,
-            pady=10,
+            padx=10,
+            pady=8,
             cursor='hand2'
         )
-        self.select_button.pack(side=tk.LEFT, padx=3, expand=True, fill=tk.X)
+        self.select_button.pack(fill=tk.X, pady=2)
+
+        # Take Screenshot Button
+        self.screenshot_button = tk.Button(
+            button_frame,
+            text="📸 Screenshot & Analyze",
+            command=self.take_screenshot,
+            font=('Arial', 10, 'bold'),
+            bg='#27ae60',
+            fg='white',
+            padx=10,
+            pady=8,
+            cursor='hand2',
+            state='disabled' if not self.region else 'normal'
+        )
+        self.screenshot_button.pack(fill=tk.X, pady=2)
 
         # Settings Button
         self.settings_button = tk.Button(
             button_frame,
             text="⚙️ Settings",
             command=self.open_settings,
-            font=('Arial', 11, 'bold'),
+            font=('Arial', 10, 'bold'),
             bg='#9b59b6',
             fg='white',
-            padx=15,
-            pady=10,
+            padx=10,
+            pady=8,
             cursor='hand2'
         )
-        self.settings_button.pack(side=tk.LEFT, padx=3, expand=True, fill=tk.X)
+        self.settings_button.pack(fill=tk.X, pady=2)
 
-        # Take Screenshot Button
-        self.screenshot_button = tk.Button(
-            button_frame,
-            text="📸 Take Screenshot & Analyze",
-            command=self.take_screenshot,
-            font=('Arial', 11, 'bold'),
-            bg='#27ae60',
-            fg='white',
-            padx=15,
-            pady=10,
-            cursor='hand2',
-            state='disabled' if not self.region else 'normal'
-        )
-        self.screenshot_button.pack(side=tk.LEFT, padx=3, expand=True, fill=tk.X)
-
-        # Region Info Label
+        # Region Info Label - Compact
         self.region_info_label = tk.Label(
             self.root,
             text=self.get_region_info_text(),
-            font=('Arial', 9),
+            font=('Arial', 8),
             bg='#2c3e50',
             fg='#95a5a6'
         )
-        self.region_info_label.pack(pady=5)
+        self.region_info_label.pack(pady=3)
 
     def get_region_info_text(self):
         """Get region info text for display"""
@@ -1313,10 +1354,16 @@ class TriviaVisionAI:
         try:
             screenshot = self.capture_region(self.region)
 
-            # Resize for preview (maintain aspect ratio)
-            preview_width = 600
+            # Resize for preview (maintain aspect ratio) - smaller for compact window
+            preview_width = 400  # Reduced from 600 for compact window
             aspect_ratio = screenshot.height / screenshot.width
             preview_height = int(preview_width * aspect_ratio)
+
+            # Limit preview height to fit in compact window
+            max_preview_height = 200
+            if preview_height > max_preview_height:
+                preview_height = max_preview_height
+                preview_width = int(preview_height / aspect_ratio)
 
             screenshot_resized = screenshot.resize((preview_width, preview_height), Image.Resampling.LANCZOS)
 
