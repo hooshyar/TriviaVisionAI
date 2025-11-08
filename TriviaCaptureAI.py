@@ -631,17 +631,15 @@ class RegionSelector:
         self.screen_height = self.root.winfo_screenheight()
 
         # Platform-specific fullscreen setup with more transparency for better visibility
+        # Use geometry-based fullscreen to avoid creating new desktop space on macOS
+        self.root.overrideredirect(True)
+        self.root.geometry(f"{self.screen_width}x{self.screen_height}+0+0")
+        self.root.attributes('-topmost', True)
+
         if IS_MAC:
-            # macOS-specific fullscreen handling
-            self.root.attributes('-fullscreen', True)
-            self.root.attributes('-alpha', 0.15)  # More transparent on Mac
-            # Ensure window is on top
-            self.root.attributes('-topmost', True)
+            self.root.attributes('-alpha', 0.3)  # Semi-transparent on Mac
         else:
-            # Windows/Linux fullscreen
-            self.root.attributes('-fullscreen', True)
-            self.root.attributes('-alpha', 0.2)  # More transparent
-            self.root.attributes('-topmost', True)
+            self.root.attributes('-alpha', 0.3)  # Semi-transparent
 
         self.root.configure(bg='black')
         self.root.deiconify()  # Show the window
@@ -652,7 +650,7 @@ class RegionSelector:
         # Instruction label - more helpful for seamless workflow
         self.instruction_label = tk.Label(
             self.root,
-            text="Drag to select the trivia question area on your screen • ESC to cancel",
+            text="Drag to select the trivia question area • Then press ENTER to confirm • ESC to cancel",
             font=('Arial', 14, 'bold'),
             bg='black',
             fg='#1abc9c'
@@ -699,6 +697,8 @@ class RegionSelector:
             self.canvas.bind("<ButtonRelease-1>", self.on_draw_release)
 
         self.root.bind("<Escape>", lambda e: self.cancel_selection())
+        self.root.bind("<Return>", lambda e: self.confirm_selection())
+        self.root.bind("<KP_Enter>", lambda e: self.confirm_selection())
 
         self.root.mainloop()
 
@@ -794,7 +794,7 @@ class RegionSelector:
 
         # Update instruction
         self.instruction_label.config(
-            text="✓ Drag box to move • Drag corners to resize • Click 'Confirm' when ready",
+            text="✓ Drag box to move • Drag corners to resize • Press ENTER to confirm • ESC to cancel",
             fg='#1abc9c',
             font=('Arial', 13, 'bold')
         )
