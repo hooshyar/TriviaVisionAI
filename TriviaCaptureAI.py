@@ -6,6 +6,8 @@ import requests
 import time
 import os
 import json
+import sys
+import platform
 from io import BytesIO
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -23,6 +25,11 @@ try:
 except ImportError:
     GEMINI_AVAILABLE = False
     print("Warning: google-generativeai library not available. Install with: pip install google-generativeai")
+
+# Detect platform
+IS_MAC = platform.system() == 'Darwin'
+IS_WINDOWS = platform.system() == 'Windows'
+IS_LINUX = platform.system() == 'Linux'
 
 CONFIG_FILE = "trivia_config.json"
 
@@ -54,6 +61,71 @@ GEMINI_MODELS = [
     "gemini-1.5-flash-8b",       # Smaller, faster
     "gemini-1.5-pro",            # Pro model (best quality)
 ]
+
+
+def get_screen_scale_factor():
+    """Get the screen scale factor for Retina/HiDPI displays"""
+    try:
+        # Create a temporary root window to get scale factor
+        temp_root = tk.Tk()
+        temp_root.withdraw()
+
+        # On macOS, tk scaling gives us the scale factor
+        if IS_MAC:
+            # macOS Retina displays typically have 2.0 scale factor
+            scale = temp_root.tk.call('tk', 'scaling')
+            # Convert to integer scale factor (1, 2, or 3)
+            scale_factor = round(scale / 72.0) if scale > 100 else 1
+        else:
+            # For Windows/Linux, check DPI awareness
+            scale_factor = 1
+
+        temp_root.destroy()
+        return max(1, scale_factor)
+    except Exception as e:
+        print(f"Could not detect scale factor: {e}")
+        return 1
+
+
+def check_macos_permissions():
+    """Check if screen recording permissions are granted on macOS"""
+    if not IS_MAC:
+        return True
+
+    try:
+        # Try to take a small screenshot to test permissions
+        if MSS_AVAILABLE:
+            with mss() as sct:
+                test_capture = sct.grab(sct.monitors[0])
+                # Check if we got actual pixel data (not all black)
+                # This is a basic check - permissions denied usually results in black screens
+                return test_capture.size[0] > 0 and test_capture.size[1] > 0
+        else:
+            # Fallback to ImageGrab test
+            test_img = ImageGrab.grab(bbox=(0, 0, 100, 100))
+            return test_img is not None
+    except Exception as e:
+        print(f"Permission check failed: {e}")
+        return False
+
+
+def show_macos_permission_help():
+    """Show help dialog for macOS screen recording permissions"""
+    help_text = """macOS Screen Recording Permission Required
+
+To capture screenshots, you need to grant permission:
+
+1. Open System Preferences/System Settings
+2. Go to Security & Privacy (or Privacy & Security)
+3. Click on 'Screen Recording' in the left sidebar
+4. Check the box next to Python or Terminal
+5. Restart this application
+
+Note: You may need to click the lock icon to make changes.
+
+After granting permission, please restart the app."""
+
+    messagebox.showwarning("Permission Required", help_text)
 
 
 class SettingsDialog:
@@ -526,16 +598,35 @@ class RegionSelector:
         # Handle size
         self.handle_size = 10
 
+        # Screen scale factor for Retina/HiDPI displays
+        self.scale_factor = get_screen_scale_factor()
+        print(f"Screen scale factor detected: {self.scale_factor}x")
+
     def select_region(self):
         """Open fullscreen window to select and adjust region"""
         self.root = tk.Tk()
-        self.root.attributes('-fullscreen', True)
-        self.root.attributes('-alpha', 0.3)
-        self.root.configure(bg='black')
+        self.root.withdraw()  # Hide initially
+        self.root.update_idletasks()
 
-        # Get screen dimensions
+        # Get screen dimensions BEFORE going fullscreen
         self.screen_width = self.root.winfo_screenwidth()
         self.screen_height = self.root.winfo_screenheight()
+
+        # Platform-specific fullscreen setup
+        if IS_MAC:
+            # macOS-specific fullscreen handling
+            self.root.attributes('-fullscreen', True)
+            self.root.attributes('-alpha', 0.3)
+            # Ensure window is on top
+            self.root.attributes('-topmost', True)
+        else:
+            # Windows/Linux fullscreen
+            self.root.attributes('-fullscreen', True)
+            self.root.attributes('-alpha', 0.3)
+            self.root.attributes('-topmost', True)
+
+        self.root.configure(bg='black')
+        self.root.deiconify()  # Show the window
 
         self.canvas = tk.Canvas(self.root, cursor="cross", bg='grey', highlightthickness=0)
         self.canvas.pack(fill=tk.BOTH, expand=True)
@@ -595,10 +686,11 @@ class RegionSelector:
 
     def create_region_from_dict(self, region_dict):
         """Create visual region from saved coordinates"""
-        x1 = region_dict['left']
-        y1 = region_dict['top']
-        x2 = x1 + region_dict['width']
-        y2 = y1 + region_dict['height']
+        # Convert physical pixels back to logical pixels for display
+        x1 = region_dict['left'] / self.scale_factor
+        y1 = region_dict['top'] / self.scale_factor
+        x2 = x1 + (region_dict['width'] / self.scale_factor)
+        y2 = y1 + (region_dict['height'] / self.scale_factor)
 
         self.start_x = x1
         self.start_y = y1
@@ -894,12 +986,17 @@ class RegionSelector:
 
         x1, y1, x2, y2 = coords
 
+        # Apply scale factor for Retina/HiDPI displays
+        # UI coordinates are in logical pixels, but screenshots need physical pixels
         self.region = {
-            'top': int(y1),
-            'left': int(x1),
-            'width': int(x2 - x1),
-            'height': int(y2 - y1)
+            'top': int(y1 * self.scale_factor),
+            'left': int(x1 * self.scale_factor),
+            'width': int((x2 - x1) * self.scale_factor),
+            'height': int((y2 - y1) * self.scale_factor)
         }
+
+        print(f"Region selected (UI coords): {int(x1)},{int(y1)} {int(x2-x1)}x{int(y2-y1)}")
+        print(f"Region saved (physical pixels): {self.region['left']},{self.region['top']} {self.region['width']}x{self.region['height']}")
 
         self.root.destroy()
         if self.callback:
@@ -1165,6 +1262,12 @@ class TriviaVisionAI:
 
     def select_region(self):
         """Handle region selection button click"""
+        # Check macOS permissions first
+        if IS_MAC and not check_macos_permissions():
+            show_macos_permission_help()
+            self.update_status("❌ Screen recording permission required on macOS")
+            return
+
         if self.region:
             self.update_status("Adjust your region: drag to move, drag handles to resize...")
         else:
@@ -1182,9 +1285,17 @@ class TriviaVisionAI:
             else:
                 self.update_status("Region selection cancelled")
 
-        # Pass existing region to allow adjustment
-        selector = RegionSelector(region_selected, initial_region=self.region)
-        self.root.after(100, selector.select_region)
+        try:
+            # Pass existing region to allow adjustment
+            selector = RegionSelector(region_selected, initial_region=self.region)
+            self.root.after(100, selector.select_region)
+        except Exception as e:
+            error_msg = f"❌ Error opening region selector: {str(e)}"
+            self.update_status(error_msg)
+            print(f"Region selection error: {e}")
+            if IS_MAC:
+                messagebox.showerror("Region Selection Error",
+                    f"Could not open region selector.\n\n{str(e)}\n\nOn macOS, make sure screen recording permission is granted.")
 
     def start_preview(self):
         """Start live preview of selected region"""
@@ -1221,26 +1332,47 @@ class TriviaVisionAI:
 
     def capture_region(self, region):
         """Capture screenshot of specified region"""
-        if MSS_AVAILABLE:
-            # Use mss for faster capture
-            with mss() as sct:
-                monitor = {
-                    'top': region['top'],
-                    'left': region['left'],
-                    'width': region['width'],
-                    'height': region['height']
-                }
-                screenshot = sct.grab(monitor)
-                return Image.frombytes('RGB', screenshot.size, screenshot.rgb)
-        else:
-            # Fallback to PIL ImageGrab
-            bbox = (
-                region['left'],
-                region['top'],
-                region['left'] + region['width'],
-                region['top'] + region['height']
-            )
-            return ImageGrab.grab(bbox=bbox)
+        try:
+            if MSS_AVAILABLE:
+                # Use mss for faster and more reliable capture (especially on macOS)
+                with mss() as sct:
+                    monitor = {
+                        'top': region['top'],
+                        'left': region['left'],
+                        'width': region['width'],
+                        'height': region['height']
+                    }
+                    screenshot = sct.grab(monitor)
+                    img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
+
+                    # Verify we didn't get a blank screenshot (permission issue on Mac)
+                    if IS_MAC:
+                        # Quick check: if image is all black, might be permission issue
+                        extrema = img.convert('L').getextrema()
+                        if extrema == (0, 0):
+                            raise Exception("Screenshot appears blank - check screen recording permissions")
+
+                    return img
+            else:
+                # Fallback to PIL ImageGrab
+                bbox = (
+                    region['left'],
+                    region['top'],
+                    region['left'] + region['width'],
+                    region['top'] + region['height']
+                )
+                img = ImageGrab.grab(bbox=bbox)
+
+                if img is None:
+                    raise Exception("Screenshot capture failed")
+
+                return img
+
+        except Exception as e:
+            print(f"Screenshot capture error: {e}")
+            if IS_MAC:
+                show_macos_permission_help()
+            raise
 
     def update_status(self, message):
         """Update status text display"""
@@ -1479,15 +1611,40 @@ def main():
     print("=" * 70)
     print()
 
+    # Platform detection
+    print(f"Platform: {platform.system()} {platform.release()}")
+    if IS_MAC:
+        print("macOS detected - Retina display support enabled")
+        print()
+
     # Check dependencies
     if not MSS_AVAILABLE:
         print("⚠️  Warning: 'mss' library not found. Install for better performance:")
         print("   pip install mss")
+        if IS_MAC:
+            print("   Note: mss is highly recommended for macOS!")
         print()
+    else:
+        print("✓ mss library available for fast screenshot capture")
 
     if not GEMINI_AVAILABLE:
         print("⚠️  Warning: 'google-generativeai' library not found.")
         print("   Install for Gemini support: pip install google-generativeai")
+        print()
+    else:
+        print("✓ Google Gemini library available")
+
+    # macOS permission check
+    if IS_MAC:
+        print()
+        print("Checking macOS screen recording permissions...")
+        if check_macos_permissions():
+            print("✓ Screen recording permissions OK")
+        else:
+            print("⚠️  WARNING: Screen recording permissions may not be granted!")
+            print("   You may need to enable Screen Recording permission in System Settings")
+            print("   Go to: System Settings > Privacy & Security > Screen Recording")
+            print("   Enable permission for Python/Terminal and restart this app")
         print()
 
     print("💡 Configure your API keys and models using the ⚙️ Settings button in the app.")
