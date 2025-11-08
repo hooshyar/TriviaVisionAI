@@ -27,6 +27,25 @@ TriviaVision AI is a revolutionary Python desktop application that captures scre
   - **OpenAI API key** ([Get one here](https://platform.openai.com/api-keys))
   - **Google Gemini API key** ([Get one here](https://aistudio.google.com/app/apikey))
 
+### macOS Specific Requirements
+
+This app is **fully optimized for macOS**, including:
+- ✅ Retina display support (automatic scaling)
+- ✅ Native screenshot capture with `mss` library
+- ✅ Multi-monitor support
+- ⚠️ **Screen Recording Permission Required**
+
+**Important for macOS users:**
+
+Before running the app, you must grant Screen Recording permission:
+
+1. Open **System Settings** (or System Preferences on older macOS)
+2. Go to **Privacy & Security** → **Screen Recording**
+3. Enable permission for **Python** or **Terminal** (whichever you use to run the app)
+4. **Restart the terminal** and run the app again
+
+The app will automatically detect if permissions are missing and guide you through the setup.
+
 ### Steps
 
 1. Clone this repository:
@@ -39,6 +58,8 @@ cd TriviaVisionAI
 ```bash
 pip install -r requirements.txt
 ```
+
+**Note for macOS users:** All dependencies including `mss` are essential for proper functionality on Mac.
 
 3. **Easy Setup - No Code Editing Required!**
 
@@ -206,6 +227,29 @@ You only need to configure these once - they persist across sessions. Use the **
 **Region too small error:**
 - The minimum region size is 20x20 pixels
 - Draw a larger selection area
+
+### macOS Specific Troubleshooting
+
+**Black or blank screenshots on Mac:**
+- This usually means screen recording permission is not granted
+- Go to System Settings > Privacy & Security > Screen Recording
+- Enable Python or Terminal
+- **Important:** Restart your terminal completely after granting permission
+
+**Retina display issues (coordinates off):**
+- The app now automatically handles Retina scaling
+- If you see mismatched coordinates, check the terminal output for scale factor detection
+- The app converts logical pixels (UI) to physical pixels (screenshots) automatically
+
+**Fullscreen selector not appearing:**
+- Press Cmd+Tab to ensure the selector window is in focus
+- Check if Mission Control or other features are interfering
+- Try clicking on the app in the Dock
+
+**Multiple monitors on Mac:**
+- The app detects all monitors automatically
+- Make sure to select a region on your primary display for best results
+- If using external monitors, the coordinates should work correctly
 
 ## Performance
 
