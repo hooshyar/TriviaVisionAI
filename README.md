@@ -5,14 +5,17 @@ TriviaVision AI is a revolutionary Python desktop application that captures scre
 ## Features
 
 - **🚀 Parallel AI Processing**: Queries both OpenAI and Google Gemini simultaneously for ultra-fast results
-- **🤖 Dual AI Models**: Uses OpenAI's `gpt-4o-mini` and Google's `gemini-2.0-flash-exp` for best speed and accuracy
+- **🤖 Dual AI Models**: Choose from latest models including `gpt-4o`, `gpt-4o-mini`, `gemini-2.0-flash-exp`, and more
+- **⚙️ Easy Configuration UI**: No code editing! Configure API keys, models, and prompts through intuitive Settings dialog
+- **🔒 Secure Key Management**: Password-masked API key inputs with show/hide toggle and connection testing
 - **📸 Desktop Screenshot Capture**: Monitor any region of your screen for trivia questions
 - **🎯 Interactive Region Selection**: Click and drag to select the area where trivia questions appear
 - **👁️ Live Preview**: Real-time preview of the selected screen region (updates every second)
 - **💻 Modern GUI Interface**: User-friendly Tkinter-based interface with side-by-side AI response comparison
 - **⚡ Ultra-Fast Response**: Parallel execution means you get answers in the time it takes for the slowest API
-- **💾 Configuration Persistence**: Saves your selected region for future sessions
+- **💾 Configuration Persistence**: Saves all settings (API keys, models, prompts, region) automatically
 - **📊 Performance Tracking**: Monitors and displays response time for each AI model
+- **💬 Customizable Prompts**: Edit prompts with quick templates or create your own
 - **🔧 Flexible Setup**: Works with one or both AI providers
 
 ## Installation
@@ -36,19 +39,20 @@ cd TriviaVisionAI
 pip install -r requirements.txt
 ```
 
-3. Set your API keys (choose one or both):
+3. **Easy Setup - No Code Editing Required!**
 
-   **Method 1: Environment Variables (Recommended)**
+   Simply run the app and click the **⚙️ Settings** button to configure:
+   - API keys (password-masked with show/hide toggle)
+   - AI models (choose from latest available models)
+   - Custom prompts (with quick templates)
+
+   All settings are automatically saved and loaded on next run.
+
+   **Optional**: Set environment variables (auto-detected on first run):
    ```bash
-   # For OpenAI (required for OpenAI support)
    export OPENAI_API_KEY='your-openai-api-key-here'
-
-   # For Gemini (required for Gemini support)
    export GEMINI_API_KEY='your-gemini-api-key-here'
    ```
-
-   **Method 2: Edit the code**
-   Open `TriviaCaptureAI.py` and replace the placeholder values on lines 28-29.
 
    **Note**: You can use just one API or both. The app will automatically detect which APIs are configured and use them accordingly.
 
@@ -75,6 +79,33 @@ python TriviaCaptureAI.py
 
 4. **Screenshots are automatically saved** to the `captured_images/` directory with timestamps
 
+## Settings & Configuration
+
+The app includes a comprehensive **Settings dialog** (⚙️ button) with three tabs:
+
+### 🔑 API Keys Tab
+- Enter and manage your OpenAI and Gemini API keys
+- Password-masked input fields with show/hide toggle
+- **Test Connection** buttons to verify your keys are valid
+- Direct links to get API keys from providers
+
+### 🤖 Models Tab
+- Select from the latest available models:
+  - **OpenAI**: gpt-4o, gpt-4o-mini (recommended), gpt-4-turbo, gpt-4
+  - **Gemini**: gemini-2.0-flash-exp (recommended), gemini-1.5-flash, gemini-1.5-flash-8b, gemini-1.5-pro
+- Model comparison guide with performance/cost insights
+- Easily switch models without code editing
+
+### 💬 Prompt Tab
+- Customize the AI prompt for better results
+- Three quick templates:
+  - **Default**: Balanced approach
+  - **Detailed**: Thorough analysis with explanations
+  - **Quick**: Brief answers only
+- Full text editor for custom prompts
+
+All settings are automatically saved to `trivia_config.json` and persist across sessions.
+
 ## Why Parallel AI?
 
 Running multiple AI models simultaneously provides several benefits:
@@ -93,9 +124,15 @@ Running multiple AI models simultaneously provides several benefits:
 - **mss**: Fast cross-platform screenshot library (optional but recommended)
 - **tkinter**: GUI framework (usually included with Python)
 
-## Configuration
+## Configuration File
 
-The application saves your selected region to `trivia_config.json` automatically. This means you only need to select the region once, and it will be remembered in future sessions.
+The application automatically saves all settings to `trivia_config.json`:
+- API keys (securely stored locally)
+- Selected AI models
+- Custom prompts
+- Screen region coordinates
+
+You only need to configure these once - they persist across sessions. Use the **⚙️ Settings** button anytime to update your configuration.
 
 ## How It Works
 
@@ -127,15 +164,27 @@ The application saves your selected region to `trivia_config.json` automatically
 - The app will still work with OpenAI only
 
 **"API Keys Missing" error:**
-- Make sure you've set at least one API key as an environment variable
-- OpenAI: `export OPENAI_API_KEY='your-key'`
-- Gemini: `export GEMINI_API_KEY='your-key'`
-- Or edit lines 28-29 in `TriviaCaptureAI.py`
+- Click the **⚙️ Settings** button and go to the **🔑 API Keys** tab
+- Enter at least one API key (OpenAI or Gemini)
+- Use the **🧪 Test Connection** button to verify your key works
+- Click **💾 Save Settings**
 
 **Only one AI model showing results:**
-- Check that both API keys are correctly set
-- Verify the library is installed: `pip install google-generativeai`
+- Open **⚙️ Settings** → **🔑 API Keys** tab
+- Make sure both API keys are entered correctly
+- Test each connection using the test buttons
+- Verify google-generativeai is installed: `pip install google-generativeai`
 - Check the terminal output for any error messages
+
+**Wrong model being used:**
+- Open **⚙️ Settings** → **🤖 Models** tab
+- Select your preferred models from the dropdowns
+- Click **💾 Save Settings**
+
+**Want to customize AI responses:**
+- Open **⚙️ Settings** → **💬 Prompt** tab
+- Try the quick templates or write your own custom prompt
+- Click **💾 Save Settings**
 
 **Region selection not working:**
 - Make sure you have proper display permissions on your system

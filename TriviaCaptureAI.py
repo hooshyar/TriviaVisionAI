@@ -25,8 +25,474 @@ except ImportError:
     print("Warning: google-generativeai library not available. Install with: pip install google-generativeai")
 
 CONFIG_FILE = "trivia_config.json"
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "YOUR_API_KEY")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_GEMINI_KEY")
+
+# Default values
+DEFAULT_CONFIG = {
+    "api_keys": {
+        "openai": os.environ.get("OPENAI_API_KEY", ""),
+        "gemini": os.environ.get("GEMINI_API_KEY", "")
+    },
+    "models": {
+        "openai_model": "gpt-4o-mini",
+        "gemini_model": "gemini-2.0-flash-exp"
+    },
+    "prompt": "This image contains a trivia question. Please read the question carefully and provide the correct answer. Be concise and direct with your answer.",
+    "region": None
+}
+
+# Available models
+OPENAI_MODELS = [
+    "gpt-4o",           # Latest full model (best quality)
+    "gpt-4o-mini",      # Fast and cheap (recommended)
+    "gpt-4-turbo",      # Previous generation
+    "gpt-4"             # Original GPT-4
+]
+
+GEMINI_MODELS = [
+    "gemini-2.0-flash-exp",      # Latest experimental flash (fastest)
+    "gemini-1.5-flash",          # Stable flash model
+    "gemini-1.5-flash-8b",       # Smaller, faster
+    "gemini-1.5-pro",            # Pro model (best quality)
+]
+
+
+class SettingsDialog:
+    """Settings dialog for configuring API keys, models, and prompts"""
+
+    def __init__(self, parent, config):
+        self.parent = parent
+        self.config = config.copy()
+        self.result = None
+
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("⚙️ Settings")
+        self.dialog.geometry("700x650")
+        self.dialog.configure(bg='#2c3e50')
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Setup the settings UI"""
+
+        # Create notebook for tabs
+        style = ttk.Style()
+        style.theme_use('default')
+        style.configure('TNotebook', background='#2c3e50', borderwidth=0)
+        style.configure('TNotebook.Tab', padding=[20, 10], background='#34495e', foreground='white')
+        style.map('TNotebook.Tab', background=[('selected', '#1abc9c')])
+
+        notebook = ttk.Notebook(self.dialog)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # API Keys Tab
+        api_frame = tk.Frame(notebook, bg='#34495e', padx=20, pady=20)
+        notebook.add(api_frame, text='🔑 API Keys')
+        self.setup_api_tab(api_frame)
+
+        # Models Tab
+        models_frame = tk.Frame(notebook, bg='#34495e', padx=20, pady=20)
+        notebook.add(models_frame, text='🤖 Models')
+        self.setup_models_tab(models_frame)
+
+        # Prompt Tab
+        prompt_frame = tk.Frame(notebook, bg='#34495e', padx=20, pady=20)
+        notebook.add(prompt_frame, text='💬 Prompt')
+        self.setup_prompt_tab(prompt_frame)
+
+        # Buttons at bottom
+        button_frame = tk.Frame(self.dialog, bg='#2c3e50', pady=10)
+        button_frame.pack(fill=tk.X, padx=10)
+
+        tk.Button(
+            button_frame,
+            text="💾 Save Settings",
+            command=self.save_settings,
+            font=('Arial', 12, 'bold'),
+            bg='#27ae60',
+            fg='white',
+            padx=20,
+            pady=10,
+            cursor='hand2'
+        ).pack(side=tk.LEFT, padx=5, expand=True, fill=tk.X)
+
+        tk.Button(
+            button_frame,
+            text="❌ Cancel",
+            command=self.dialog.destroy,
+            font=('Arial', 12, 'bold'),
+            bg='#e74c3c',
+            fg='white',
+            padx=20,
+            pady=10,
+            cursor='hand2'
+        ).pack(side=tk.LEFT, padx=5, expand=True, fill=tk.X)
+
+    def setup_api_tab(self, parent):
+        """Setup API keys configuration tab"""
+
+        tk.Label(
+            parent,
+            text="Configure your AI API keys",
+            font=('Arial', 14, 'bold'),
+            bg='#34495e',
+            fg='#ecf0f1'
+        ).pack(pady=(0, 20))
+
+        # OpenAI API Key
+        openai_frame = tk.LabelFrame(
+            parent,
+            text="OpenAI API Key",
+            font=('Arial', 11, 'bold'),
+            bg='#2c3e50',
+            fg='#10a37f',
+            padx=15,
+            pady=15
+        )
+        openai_frame.pack(fill=tk.X, pady=10)
+
+        tk.Label(
+            openai_frame,
+            text="Get your key from: https://platform.openai.com/api-keys",
+            font=('Arial', 9),
+            bg='#2c3e50',
+            fg='#95a5a6'
+        ).pack(anchor='w')
+
+        self.openai_key_var = tk.StringVar(value=self.config.get('api_keys', {}).get('openai', ''))
+        openai_entry = tk.Entry(
+            openai_frame,
+            textvariable=self.openai_key_var,
+            font=('Arial', 10),
+            bg='#1e2a38',
+            fg='#ecf0f1',
+            insertbackground='white',
+            show='•',
+            relief=tk.FLAT
+        )
+        openai_entry.pack(fill=tk.X, pady=(5, 10), ipady=8)
+
+        tk.Button(
+            openai_frame,
+            text="👁️ Show/Hide",
+            command=lambda: self.toggle_visibility(openai_entry),
+            font=('Arial', 9),
+            bg='#3498db',
+            fg='white',
+            cursor='hand2'
+        ).pack(side=tk.LEFT)
+
+        tk.Button(
+            openai_frame,
+            text="🧪 Test Connection",
+            command=lambda: self.test_openai_connection(),
+            font=('Arial', 9),
+            bg='#9b59b6',
+            fg='white',
+            cursor='hand2'
+        ).pack(side=tk.LEFT, padx=5)
+
+        # Gemini API Key
+        gemini_frame = tk.LabelFrame(
+            parent,
+            text="Google Gemini API Key",
+            font=('Arial', 11, 'bold'),
+            bg='#2c3e50',
+            fg='#4285f4',
+            padx=15,
+            pady=15
+        )
+        gemini_frame.pack(fill=tk.X, pady=10)
+
+        tk.Label(
+            gemini_frame,
+            text="Get your key from: https://aistudio.google.com/app/apikey",
+            font=('Arial', 9),
+            bg='#2c3e50',
+            fg='#95a5a6'
+        ).pack(anchor='w')
+
+        self.gemini_key_var = tk.StringVar(value=self.config.get('api_keys', {}).get('gemini', ''))
+        gemini_entry = tk.Entry(
+            gemini_frame,
+            textvariable=self.gemini_key_var,
+            font=('Arial', 10),
+            bg='#1e2a38',
+            fg='#ecf0f1',
+            insertbackground='white',
+            show='•',
+            relief=tk.FLAT
+        )
+        gemini_entry.pack(fill=tk.X, pady=(5, 10), ipady=8)
+
+        tk.Button(
+            gemini_frame,
+            text="👁️ Show/Hide",
+            command=lambda: self.toggle_visibility(gemini_entry),
+            font=('Arial', 9),
+            bg='#3498db',
+            fg='white',
+            cursor='hand2'
+        ).pack(side=tk.LEFT)
+
+        tk.Button(
+            gemini_frame,
+            text="🧪 Test Connection",
+            command=lambda: self.test_gemini_connection(),
+            font=('Arial', 9),
+            bg='#9b59b6',
+            fg='white',
+            cursor='hand2'
+        ).pack(side=tk.LEFT, padx=5)
+
+    def setup_models_tab(self, parent):
+        """Setup models selection tab"""
+
+        tk.Label(
+            parent,
+            text="Select AI models for analysis",
+            font=('Arial', 14, 'bold'),
+            bg='#34495e',
+            fg='#ecf0f1'
+        ).pack(pady=(0, 20))
+
+        # OpenAI Model Selection
+        openai_frame = tk.LabelFrame(
+            parent,
+            text="OpenAI Model",
+            font=('Arial', 11, 'bold'),
+            bg='#2c3e50',
+            fg='#10a37f',
+            padx=15,
+            pady=15
+        )
+        openai_frame.pack(fill=tk.X, pady=10)
+
+        tk.Label(
+            openai_frame,
+            text="Recommended: gpt-4o-mini (fast and cheap)",
+            font=('Arial', 9),
+            bg='#2c3e50',
+            fg='#95a5a6'
+        ).pack(anchor='w')
+
+        self.openai_model_var = tk.StringVar(value=self.config.get('models', {}).get('openai_model', 'gpt-4o-mini'))
+        openai_combo = ttk.Combobox(
+            openai_frame,
+            textvariable=self.openai_model_var,
+            values=OPENAI_MODELS,
+            state='readonly',
+            font=('Arial', 10)
+        )
+        openai_combo.pack(fill=tk.X, pady=5)
+
+        # Gemini Model Selection
+        gemini_frame = tk.LabelFrame(
+            parent,
+            text="Gemini Model",
+            font=('Arial', 11, 'bold'),
+            bg='#2c3e50',
+            fg='#4285f4',
+            padx=15,
+            pady=15
+        )
+        gemini_frame.pack(fill=tk.X, pady=10)
+
+        tk.Label(
+            gemini_frame,
+            text="Recommended: gemini-2.0-flash-exp (fastest experimental)",
+            font=('Arial', 9),
+            bg='#2c3e50',
+            fg='#95a5a6'
+        ).pack(anchor='w')
+
+        self.gemini_model_var = tk.StringVar(value=self.config.get('models', {}).get('gemini_model', 'gemini-2.0-flash-exp'))
+        gemini_combo = ttk.Combobox(
+            gemini_frame,
+            textvariable=self.gemini_model_var,
+            values=GEMINI_MODELS,
+            state='readonly',
+            font=('Arial', 10)
+        )
+        gemini_combo.pack(fill=tk.X, pady=5)
+
+        # Model comparison info
+        info_frame = tk.Frame(parent, bg='#2c3e50', pady=10)
+        info_frame.pack(fill=tk.X, pady=20)
+
+        tk.Label(
+            info_frame,
+            text="💡 Model Comparison:",
+            font=('Arial', 10, 'bold'),
+            bg='#2c3e50',
+            fg='#f39c12'
+        ).pack(anchor='w')
+
+        comparison_text = """
+• gpt-4o: Best quality, slower, more expensive
+• gpt-4o-mini: Great balance of speed/quality (Recommended)
+• gemini-2.0-flash-exp: Experimental, fastest, latest features
+• gemini-1.5-pro: Best Gemini quality, slower
+        """
+
+        tk.Label(
+            info_frame,
+            text=comparison_text,
+            font=('Arial', 9),
+            bg='#2c3e50',
+            fg='#bdc3c7',
+            justify=tk.LEFT
+        ).pack(anchor='w', padx=10)
+
+    def setup_prompt_tab(self, parent):
+        """Setup prompt customization tab"""
+
+        tk.Label(
+            parent,
+            text="Customize the AI prompt for better results",
+            font=('Arial', 14, 'bold'),
+            bg='#34495e',
+            fg='#ecf0f1'
+        ).pack(pady=(0, 20))
+
+        tk.Label(
+            parent,
+            text="This prompt is sent to both AI models along with the screenshot:",
+            font=('Arial', 10),
+            bg='#34495e',
+            fg='#95a5a6'
+        ).pack(anchor='w', pady=(0, 10))
+
+        # Prompt text area
+        prompt_frame = tk.Frame(parent, bg='#2c3e50', relief=tk.SOLID, borderwidth=1)
+        prompt_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+
+        self.prompt_text = tk.Text(
+            prompt_frame,
+            font=('Arial', 10),
+            bg='#1e2a38',
+            fg='#ecf0f1',
+            insertbackground='white',
+            wrap=tk.WORD,
+            relief=tk.FLAT,
+            padx=10,
+            pady=10
+        )
+        self.prompt_text.pack(fill=tk.BOTH, expand=True)
+        self.prompt_text.insert(1.0, self.config.get('prompt', DEFAULT_CONFIG['prompt']))
+
+        # Quick templates
+        tk.Label(
+            parent,
+            text="Quick Templates:",
+            font=('Arial', 10, 'bold'),
+            bg='#34495e',
+            fg='#ecf0f1'
+        ).pack(anchor='w', pady=(10, 5))
+
+        templates_frame = tk.Frame(parent, bg='#34495e')
+        templates_frame.pack(fill=tk.X)
+
+        templates = [
+            ("Default", DEFAULT_CONFIG['prompt']),
+            ("Detailed", "This image shows a trivia question. Please analyze the question carefully, consider all options if present, and provide the most accurate answer with a brief explanation."),
+            ("Quick", "Read this trivia question and give me the answer only. Be brief."),
+        ]
+
+        for name, template in templates:
+            tk.Button(
+                templates_frame,
+                text=name,
+                command=lambda t=template: self.set_prompt(t),
+                font=('Arial', 9),
+                bg='#3498db',
+                fg='white',
+                cursor='hand2',
+                padx=10,
+                pady=5
+            ).pack(side=tk.LEFT, padx=2)
+
+    def toggle_visibility(self, entry):
+        """Toggle password visibility"""
+        current_show = entry.cget('show')
+        entry.config(show='' if current_show else '•')
+
+    def set_prompt(self, template):
+        """Set prompt from template"""
+        self.prompt_text.delete(1.0, tk.END)
+        self.prompt_text.insert(1.0, template)
+
+    def test_openai_connection(self):
+        """Test OpenAI API connection"""
+        api_key = self.openai_key_var.get().strip()
+        if not api_key:
+            messagebox.showwarning("No API Key", "Please enter an OpenAI API key first.")
+            return
+
+        messagebox.showinfo("Testing", "Testing OpenAI connection...\n(This may take a few seconds)")
+
+        # Simple test request
+        try:
+            headers = {
+                "Authorization": f"Bearer {api_key}"
+            }
+            response = requests.get(
+                "https://api.openai.com/v1/models",
+                headers=headers,
+                timeout=10
+            )
+            if response.status_code == 200:
+                messagebox.showinfo("Success", "✅ OpenAI API key is valid!")
+            else:
+                messagebox.showerror("Error", f"❌ Invalid API key or connection error\n\nStatus: {response.status_code}")
+        except Exception as e:
+            messagebox.showerror("Error", f"❌ Connection failed:\n\n{str(e)}")
+
+    def test_gemini_connection(self):
+        """Test Gemini API connection"""
+        api_key = self.gemini_key_var.get().strip()
+        if not api_key:
+            messagebox.showwarning("No API Key", "Please enter a Gemini API key first.")
+            return
+
+        if not GEMINI_AVAILABLE:
+            messagebox.showerror("Library Missing", "google-generativeai library not installed.\n\nInstall with: pip install google-generativeai")
+            return
+
+        messagebox.showinfo("Testing", "Testing Gemini connection...\n(This may take a few seconds)")
+
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content("Test")
+            if response:
+                messagebox.showinfo("Success", "✅ Gemini API key is valid!")
+            else:
+                messagebox.showerror("Error", "❌ Could not connect to Gemini")
+        except Exception as e:
+            messagebox.showerror("Error", f"❌ Connection failed:\n\n{str(e)}")
+
+    def save_settings(self):
+        """Save settings and close dialog"""
+        self.result = {
+            'api_keys': {
+                'openai': self.openai_key_var.get().strip(),
+                'gemini': self.gemini_key_var.get().strip()
+            },
+            'models': {
+                'openai_model': self.openai_model_var.get(),
+                'gemini_model': self.gemini_model_var.get()
+            },
+            'prompt': self.prompt_text.get(1.0, tk.END).strip(),
+            'region': self.config.get('region')
+        }
+        self.dialog.destroy()
+
+    def show(self):
+        """Show dialog and wait for result"""
+        self.dialog.wait_window()
+        return self.result
 
 
 class RegionSelector:
@@ -108,33 +574,44 @@ class TriviaVisionAI:
         self.root.geometry("1000x850")
         self.root.configure(bg='#2c3e50')
 
-        self.region = None
         self.preview_running = False
         self.preview_image_label = None
 
-        self.load_config()
+        # Load configuration
+        self.config = self.load_config()
+        self.region = self.config.get('region')
+
         self.setup_ui()
 
         if self.region:
             self.start_preview()
 
     def load_config(self):
-        """Load saved region configuration"""
+        """Load saved configuration"""
         if os.path.exists(CONFIG_FILE):
             try:
                 with open(CONFIG_FILE, 'r') as f:
                     config = json.load(f)
-                    self.region = config.get('region')
-                    print(f"Loaded saved region: {self.region}")
+                    print(f"Loaded configuration from {CONFIG_FILE}")
+                    # Merge with defaults for any missing keys
+                    merged_config = DEFAULT_CONFIG.copy()
+                    merged_config.update(config)
+                    if 'api_keys' in config:
+                        merged_config['api_keys'].update(config.get('api_keys', {}))
+                    if 'models' in config:
+                        merged_config['models'].update(config.get('models', {}))
+                    return merged_config
             except Exception as e:
                 print(f"Error loading config: {e}")
+                return DEFAULT_CONFIG.copy()
+        return DEFAULT_CONFIG.copy()
 
     def save_config(self):
-        """Save region configuration"""
+        """Save configuration"""
         try:
             with open(CONFIG_FILE, 'w') as f:
-                json.dump({'region': self.region}, f)
-            print("Region configuration saved")
+                json.dump(self.config, f, indent=2)
+            print("Configuration saved")
         except Exception as e:
             print(f"Error saving config: {e}")
 
@@ -268,29 +745,43 @@ class TriviaVisionAI:
             button_frame,
             text="📐 Select Region",
             command=self.select_region,
-            font=('Arial', 12, 'bold'),
+            font=('Arial', 11, 'bold'),
             bg='#3498db',
             fg='white',
-            padx=20,
+            padx=15,
             pady=10,
             cursor='hand2'
         )
-        self.select_button.pack(side=tk.LEFT, padx=5, expand=True, fill=tk.X)
+        self.select_button.pack(side=tk.LEFT, padx=3, expand=True, fill=tk.X)
+
+        # Settings Button
+        self.settings_button = tk.Button(
+            button_frame,
+            text="⚙️ Settings",
+            command=self.open_settings,
+            font=('Arial', 11, 'bold'),
+            bg='#9b59b6',
+            fg='white',
+            padx=15,
+            pady=10,
+            cursor='hand2'
+        )
+        self.settings_button.pack(side=tk.LEFT, padx=3, expand=True, fill=tk.X)
 
         # Take Screenshot Button
         self.screenshot_button = tk.Button(
             button_frame,
             text="📸 Take Screenshot & Analyze",
             command=self.take_screenshot,
-            font=('Arial', 12, 'bold'),
+            font=('Arial', 11, 'bold'),
             bg='#27ae60',
             fg='white',
-            padx=20,
+            padx=15,
             pady=10,
             cursor='hand2',
             state='disabled' if not self.region else 'normal'
         )
-        self.screenshot_button.pack(side=tk.LEFT, padx=5, expand=True, fill=tk.X)
+        self.screenshot_button.pack(side=tk.LEFT, padx=3, expand=True, fill=tk.X)
 
         # Region Info Label
         self.region_info_label = tk.Label(
@@ -308,12 +799,31 @@ class TriviaVisionAI:
             return f"Region: {self.region['width']}x{self.region['height']} at ({self.region['left']}, {self.region['top']})"
         return "No region selected"
 
+    def open_settings(self):
+        """Open settings dialog"""
+        dialog = SettingsDialog(self.root, self.config)
+        result = dialog.show()
+
+        if result:
+            self.config = result
+            self.region = result.get('region')
+            self.save_config()
+            self.update_status("✅ Settings saved successfully!")
+
+            # Update UI
+            self.region_info_label.config(text=self.get_region_info_text())
+
+            # Restart preview if region changed
+            if self.region:
+                self.start_preview()
+
     def select_region(self):
         """Handle region selection button click"""
         self.update_status("Please select a region on your screen...")
 
         def region_selected(region):
             self.region = region
+            self.config['region'] = region
             self.save_config()
             self.region_info_label.config(text=self.get_region_info_text())
             self.screenshot_button.config(state='normal')
@@ -392,17 +902,18 @@ class TriviaVisionAI:
             messagebox.showwarning("No Region", "Please select a region first!")
             return
 
-        # Check which APIs are available
-        has_openai = OPENAI_API_KEY and OPENAI_API_KEY != "YOUR_API_KEY"
-        has_gemini = GEMINI_AVAILABLE and GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_KEY"
+        # Check which APIs are available from config
+        has_openai = self.config.get('api_keys', {}).get('openai', '').strip()
+        has_gemini = GEMINI_AVAILABLE and self.config.get('api_keys', {}).get('gemini', '').strip()
 
         if not has_openai and not has_gemini:
             messagebox.showerror(
                 "API Keys Missing",
-                "Please set at least one API key:\n\n"
-                "OpenAI: export OPENAI_API_KEY='your-key'\n"
-                "Gemini: export GEMINI_API_KEY='your-key'\n\n"
-                "Install Gemini support: pip install google-generativeai"
+                "Please configure your API keys:\n\n"
+                "Click the ⚙️ Settings button to add:\n"
+                "• OpenAI API key\n"
+                "• Gemini API key\n\n"
+                "You need at least one API key configured."
             )
             return
 
@@ -446,9 +957,9 @@ class TriviaVisionAI:
             self.root.after(0, self.update_openai_text, "⏳ Analyzing...")
             self.root.after(0, self.update_gemini_text, "⏳ Analyzing...")
 
-            # Check which APIs are available
-            has_openai = OPENAI_API_KEY and OPENAI_API_KEY != "YOUR_API_KEY"
-            has_gemini = GEMINI_AVAILABLE and GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_KEY"
+            # Check which APIs are available from config
+            has_openai = self.config.get('api_keys', {}).get('openai', '').strip()
+            has_gemini = GEMINI_AVAILABLE and self.config.get('api_keys', {}).get('gemini', '').strip()
 
             # Run parallel queries
             with ThreadPoolExecutor(max_workers=2) as executor:
@@ -506,8 +1017,13 @@ class TriviaVisionAI:
             self.root.after(0, lambda: self.screenshot_button.config(state='normal'))
 
     def analyze_with_openai(self, image):
-        """Send image to OpenAI GPT-4o-mini API for analysis"""
+        """Send image to OpenAI API for analysis"""
         try:
+            # Get config values
+            api_key = self.config.get('api_keys', {}).get('openai', '')
+            model = self.config.get('models', {}).get('openai_model', 'gpt-4o-mini')
+            prompt = self.config.get('prompt', DEFAULT_CONFIG['prompt'])
+
             # Convert image to base64
             buffered = BytesIO()
             image.save(buffered, format="PNG")
@@ -515,18 +1031,18 @@ class TriviaVisionAI:
 
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {OPENAI_API_KEY}"
+                "Authorization": f"Bearer {api_key}"
             }
 
             payload = {
-                "model": "gpt-4o-mini",  # Using fast mini model
+                "model": model,
                 "messages": [
                     {
                         "role": "user",
                         "content": [
                             {
                                 "type": "text",
-                                "text": "This image contains a trivia question. Please read the question carefully and provide the correct answer. Be concise and direct with your answer."
+                                "text": prompt
                             },
                             {
                                 "type": "image_url",
@@ -566,18 +1082,21 @@ class TriviaVisionAI:
             return {'error': str(e), 'duration': 0}
 
     def analyze_with_gemini(self, image):
-        """Send image to Google Gemini Flash API for analysis"""
+        """Send image to Google Gemini API for analysis"""
         try:
             if not GEMINI_AVAILABLE:
                 return {'error': 'Gemini library not installed', 'duration': 0}
 
+            # Get config values
+            api_key = self.config.get('api_keys', {}).get('gemini', '')
+            model_name = self.config.get('models', {}).get('gemini_model', 'gemini-2.0-flash-exp')
+            prompt = self.config.get('prompt', DEFAULT_CONFIG['prompt'])
+
             # Configure Gemini
-            genai.configure(api_key=GEMINI_API_KEY)
+            genai.configure(api_key=api_key)
 
-            # Use the latest flash model
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
-
-            prompt = "This image contains a trivia question. Please read the question carefully and provide the correct answer. Be concise and direct with your answer."
+            # Use configured model
+            model = genai.GenerativeModel(model_name)
 
             start_time = time.time()
             response = model.generate_content([prompt, image])
@@ -618,29 +1137,9 @@ def main():
         print("   Install for Gemini support: pip install google-generativeai")
         print()
 
-    # Check API keys
-    has_openai = OPENAI_API_KEY and OPENAI_API_KEY != "YOUR_API_KEY"
-    has_gemini = GEMINI_AVAILABLE and GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_KEY"
-
-    if not has_openai:
-        print("⚠️  OpenAI API key not set!")
-        print("   Set environment variable: export OPENAI_API_KEY='your-key-here'")
-        print()
-
-    if not has_gemini:
-        print("⚠️  Gemini API key not set!")
-        print("   Set environment variable: export GEMINI_API_KEY='your-key-here'")
-        print()
-
-    if has_openai:
-        print("✅ OpenAI (gpt-4o-mini) ready")
-    if has_gemini:
-        print("✅ Gemini (gemini-2.0-flash-exp) ready")
-
-    if not has_openai and not has_gemini:
-        print("\n❌ No API keys configured! Please set at least one.")
-
+    print("💡 Configure your API keys and models using the ⚙️ Settings button in the app.")
     print()
+
     app = TriviaVisionAI()
     app.run()
 
