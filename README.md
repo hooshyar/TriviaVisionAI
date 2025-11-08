@@ -9,7 +9,8 @@ TriviaVision AI is a revolutionary Python desktop application that captures scre
 - **⚙️ Easy Configuration UI**: No code editing! Configure API keys, models, and prompts through intuitive Settings dialog
 - **🔒 Secure Key Management**: Password-masked API key inputs with show/hide toggle and connection testing
 - **📸 Desktop Screenshot Capture**: Monitor any region of your screen for trivia questions
-- **🎯 Interactive Region Selection**: Click and drag to select the area where trivia questions appear
+- **🎯 Advanced Region Selection**: Professional screen capture-style selector with drag to move, resize handles, and adjustment mode
+- **✋ Draggable & Resizable**: Move selected region anywhere or resize with 8 corner/edge handles
 - **👁️ Live Preview**: Real-time preview of the selected screen region (updates every second)
 - **💻 Modern GUI Interface**: User-friendly Tkinter-based interface with side-by-side AI response comparison
 - **⚡ Ultra-Fast Response**: Parallel execution means you get answers in the time it takes for the slowest API
@@ -63,12 +64,18 @@ pip install -r requirements.txt
 python TriviaCaptureAI.py
 ```
 
-2. **Select a region:**
+2. **Select and adjust a region:**
    - Click the "📐 Select Region" button
    - Your screen will dim with a semi-transparent overlay
-   - Click and drag to draw a rectangle around the area where trivia questions appear
-   - Release to confirm the selection
-   - Press ESC to cancel
+   - **Draw**: Click and drag to draw a rectangle around the area where trivia questions appear
+   - **Adjust Mode** (automatically enters after drawing):
+     - **Move**: Drag anywhere inside the region to reposition it
+     - **Resize**: Drag the corner or edge handles to resize
+     - Real-time dimension display shows width × height
+     - Different cursors indicate drag/resize mode
+   - **Confirm**: Click "✓ Confirm Selection" button to save
+   - **Cancel**: Click "✗ Cancel" button or press ESC to discard
+   - **Re-adjust**: Click "📐 Select Region" again to modify existing region
 
 3. **Monitor and capture:**
    - The app will show a live preview of your selected region
@@ -189,6 +196,16 @@ You only need to configure these once - they persist across sessions. Use the **
 **Region selection not working:**
 - Make sure you have proper display permissions on your system
 - On macOS, you may need to grant screen recording permissions
+
+**Want to adjust the selected region:**
+- Simply click "📐 Select Region" again
+- Your current region will appear with handles
+- Drag to move, drag handles to resize
+- Click "✓ Confirm Selection" to save changes
+
+**Region too small error:**
+- The minimum region size is 20x20 pixels
+- Draw a larger selection area
 
 ## Performance
 

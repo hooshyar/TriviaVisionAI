@@ -496,73 +496,419 @@ class SettingsDialog:
 
 
 class RegionSelector:
-    """Interactive region selector for choosing screen area to monitor"""
+    """Enhanced interactive region selector with dragging and resizing capabilities"""
 
-    def __init__(self, callback):
+    def __init__(self, callback, initial_region=None):
         self.callback = callback
-        self.start_x = None
-        self.start_y = None
-        self.rect = None
+        self.initial_region = initial_region
         self.region = None
 
+        # Drawing state
+        self.drawing = False
+        self.start_x = None
+        self.start_y = None
+
+        # Adjustment state
+        self.adjusting = False
+        self.dragging = False
+        self.resizing = False
+        self.resize_handle = None
+        self.drag_start_x = None
+        self.drag_start_y = None
+
+        # UI elements
+        self.rect = None
+        self.fill_rect = None
+        self.handles = {}
+        self.dimension_text = None
+        self.instruction_label = None
+
+        # Handle size
+        self.handle_size = 10
+
     def select_region(self):
-        """Open fullscreen transparent window to select region"""
+        """Open fullscreen window to select and adjust region"""
         self.root = tk.Tk()
         self.root.attributes('-fullscreen', True)
         self.root.attributes('-alpha', 0.3)
         self.root.configure(bg='black')
 
+        # Get screen dimensions
+        self.screen_width = self.root.winfo_screenwidth()
+        self.screen_height = self.root.winfo_screenheight()
+
         self.canvas = tk.Canvas(self.root, cursor="cross", bg='grey', highlightthickness=0)
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
-        instruction = tk.Label(
+        # Instruction label
+        self.instruction_label = tk.Label(
             self.root,
-            text="Click and drag to select the region for trivia questions. Press ESC to cancel.",
+            text="Click and drag to select region. Press ESC to cancel.",
             font=('Arial', 16, 'bold'),
             bg='black',
             fg='white'
         )
-        instruction.place(relx=0.5, rely=0.05, anchor='center')
+        self.instruction_label.place(relx=0.5, rely=0.05, anchor='center')
 
-        self.canvas.bind("<ButtonPress-1>", self.on_press)
-        self.canvas.bind("<B1-Motion>", self.on_drag)
-        self.canvas.bind("<ButtonRelease-1>", self.on_release)
-        self.root.bind("<Escape>", lambda e: self.root.destroy())
+        # Control buttons (initially hidden)
+        self.button_frame = tk.Frame(self.root, bg='#2c3e50')
+
+        self.confirm_button = tk.Button(
+            self.button_frame,
+            text="✓ Confirm Selection",
+            command=self.confirm_selection,
+            font=('Arial', 14, 'bold'),
+            bg='#27ae60',
+            fg='white',
+            padx=30,
+            pady=15,
+            cursor='hand2'
+        )
+        self.confirm_button.pack(side=tk.LEFT, padx=10)
+
+        self.cancel_button = tk.Button(
+            self.button_frame,
+            text="✗ Cancel",
+            command=self.cancel_selection,
+            font=('Arial', 14, 'bold'),
+            bg='#e74c3c',
+            fg='white',
+            padx=30,
+            pady=15,
+            cursor='hand2'
+        )
+        self.cancel_button.pack(side=tk.LEFT, padx=10)
+
+        # If initial region provided, start in adjustment mode
+        if self.initial_region:
+            self.create_region_from_dict(self.initial_region)
+            self.enter_adjustment_mode()
+        else:
+            # Bind drawing events
+            self.canvas.bind("<ButtonPress-1>", self.on_draw_press)
+            self.canvas.bind("<B1-Motion>", self.on_draw_drag)
+            self.canvas.bind("<ButtonRelease-1>", self.on_draw_release)
+
+        self.root.bind("<Escape>", lambda e: self.cancel_selection())
 
         self.root.mainloop()
 
-    def on_press(self, event):
+    def create_region_from_dict(self, region_dict):
+        """Create visual region from saved coordinates"""
+        x1 = region_dict['left']
+        y1 = region_dict['top']
+        x2 = x1 + region_dict['width']
+        y2 = y1 + region_dict['height']
+
+        self.start_x = x1
+        self.start_y = y1
+        self.draw_region(x1, y1, x2, y2)
+
+    def on_draw_press(self, event):
+        """Handle mouse press during drawing phase"""
+        self.drawing = True
         self.start_x = event.x
         self.start_y = event.y
+
+        # Clear any existing selection
         if self.rect:
             self.canvas.delete(self.rect)
+        if self.fill_rect:
+            self.canvas.delete(self.fill_rect)
+
+        # Create new rectangle
         self.rect = self.canvas.create_rectangle(
             self.start_x, self.start_y, self.start_x, self.start_y,
-            outline='red', width=3
+            outline='#1abc9c', width=3
+        )
+        self.fill_rect = self.canvas.create_rectangle(
+            self.start_x, self.start_y, self.start_x, self.start_y,
+            fill='#1abc9c', stipple='gray50', outline=''
         )
 
-    def on_drag(self, event):
+    def on_draw_drag(self, event):
+        """Handle mouse drag during drawing phase"""
+        if not self.drawing:
+            return
+
         cur_x, cur_y = event.x, event.y
         self.canvas.coords(self.rect, self.start_x, self.start_y, cur_x, cur_y)
+        self.canvas.coords(self.fill_rect, self.start_x, self.start_y, cur_x, cur_y)
+        self.update_dimension_display(self.start_x, self.start_y, cur_x, cur_y)
 
-    def on_release(self, event):
+    def on_draw_release(self, event):
+        """Handle mouse release after drawing"""
+        if not self.drawing:
+            return
+
+        self.drawing = False
         end_x, end_y = event.x, event.y
 
+        # Ensure minimum size
+        if abs(end_x - self.start_x) < 20 or abs(end_y - self.start_y) < 20:
+            messagebox.showwarning("Region Too Small", "Please select a larger region (minimum 20x20 pixels)")
+            self.canvas.delete(self.rect)
+            self.canvas.delete(self.fill_rect)
+            return
+
+        # Normalize coordinates
         x1 = min(self.start_x, end_x)
         y1 = min(self.start_y, end_y)
         x2 = max(self.start_x, end_x)
         y2 = max(self.start_y, end_y)
 
+        self.draw_region(x1, y1, x2, y2)
+        self.enter_adjustment_mode()
+
+    def draw_region(self, x1, y1, x2, y2):
+        """Draw the selection region with handles"""
+        # Update rectangle
+        if not self.rect:
+            self.rect = self.canvas.create_rectangle(
+                x1, y1, x2, y2,
+                outline='#1abc9c', width=3
+            )
+            self.fill_rect = self.canvas.create_rectangle(
+                x1, y1, x2, y2,
+                fill='#1abc9c', stipple='gray50', outline=''
+            )
+        else:
+            self.canvas.coords(self.rect, x1, y1, x2, y2)
+            self.canvas.coords(self.fill_rect, x1, y1, x2, y2)
+
+        self.update_dimension_display(x1, y1, x2, y2)
+
+    def enter_adjustment_mode(self):
+        """Enter adjustment mode with dragging and resizing"""
+        self.adjusting = True
+
+        # Update instruction
+        self.instruction_label.config(
+            text="Drag to move • Drag corners/edges to resize • Click button to confirm",
+            fg='#1abc9c'
+        )
+
+        # Show buttons
+        self.button_frame.place(relx=0.5, rely=0.95, anchor='center')
+
+        # Unbind drawing events
+        self.canvas.unbind("<ButtonPress-1>")
+        self.canvas.unbind("<B1-Motion>")
+        self.canvas.unbind("<ButtonRelease-1>")
+
+        # Bind adjustment events
+        self.canvas.bind("<ButtonPress-1>", self.on_adjust_press)
+        self.canvas.bind("<B1-Motion>", self.on_adjust_drag)
+        self.canvas.bind("<ButtonRelease-1>", self.on_adjust_release)
+        self.canvas.bind("<Motion>", self.on_motion)
+
+        # Draw handles
+        self.update_handles()
+
+    def update_handles(self):
+        """Update resize handles positions"""
+        if not self.rect:
+            return
+
+        coords = self.canvas.coords(self.rect)
+        if len(coords) < 4:
+            return
+
+        x1, y1, x2, y2 = coords
+
+        # Clear old handles
+        for handle in self.handles.values():
+            self.canvas.delete(handle)
+        self.handles.clear()
+
+        # Create handles at corners and edges
+        handle_positions = {
+            'nw': (x1, y1),
+            'n': ((x1+x2)/2, y1),
+            'ne': (x2, y1),
+            'e': (x2, (y1+y2)/2),
+            'se': (x2, y2),
+            's': ((x1+x2)/2, y2),
+            'sw': (x1, y2),
+            'w': (x1, (y1+y2)/2)
+        }
+
+        for pos_name, (hx, hy) in handle_positions.items():
+            handle = self.canvas.create_rectangle(
+                hx - self.handle_size/2, hy - self.handle_size/2,
+                hx + self.handle_size/2, hy + self.handle_size/2,
+                fill='#1abc9c', outline='white', width=2
+            )
+            self.handles[pos_name] = handle
+
+    def on_motion(self, event):
+        """Update cursor based on position"""
+        if self.dragging or self.resizing:
+            return
+
+        coords = self.canvas.coords(self.rect)
+        if len(coords) < 4:
+            return
+
+        x1, y1, x2, y2 = coords
+        x, y = event.x, event.y
+
+        # Check if over a handle
+        for pos_name, handle in self.handles.items():
+            handle_coords = self.canvas.coords(handle)
+            if (handle_coords[0] <= x <= handle_coords[2] and
+                handle_coords[1] <= y <= handle_coords[3]):
+                self.set_resize_cursor(pos_name)
+                return
+
+        # Check if inside region
+        if x1 <= x <= x2 and y1 <= y <= y2:
+            self.canvas.config(cursor="fleur")  # Move cursor
+        else:
+            self.canvas.config(cursor="cross")
+
+    def set_resize_cursor(self, handle_pos):
+        """Set appropriate cursor for resize handle"""
+        cursors = {
+            'nw': 'top_left_corner',
+            'n': 'top_side',
+            'ne': 'top_right_corner',
+            'e': 'right_side',
+            'se': 'bottom_right_corner',
+            's': 'bottom_side',
+            'sw': 'bottom_left_corner',
+            'w': 'left_side'
+        }
+        self.canvas.config(cursor=cursors.get(handle_pos, 'cross'))
+
+    def on_adjust_press(self, event):
+        """Handle mouse press in adjustment mode"""
+        coords = self.canvas.coords(self.rect)
+        if len(coords) < 4:
+            return
+
+        x1, y1, x2, y2 = coords
+        x, y = event.x, event.y
+
+        # Check if clicking a handle
+        for pos_name, handle in self.handles.items():
+            handle_coords = self.canvas.coords(handle)
+            if (handle_coords[0] <= x <= handle_coords[2] and
+                handle_coords[1] <= y <= handle_coords[3]):
+                self.resizing = True
+                self.resize_handle = pos_name
+                self.drag_start_x = x
+                self.drag_start_y = y
+                return
+
+        # Check if inside region (for dragging)
+        if x1 <= x <= x2 and y1 <= y <= y2:
+            self.dragging = True
+            self.drag_start_x = x
+            self.drag_start_y = y
+
+    def on_adjust_drag(self, event):
+        """Handle mouse drag in adjustment mode"""
+        if not (self.dragging or self.resizing):
+            return
+
+        coords = self.canvas.coords(self.rect)
+        if len(coords) < 4:
+            return
+
+        x1, y1, x2, y2 = coords
+        dx = event.x - self.drag_start_x
+        dy = event.y - self.drag_start_y
+
+        if self.dragging:
+            # Move entire region
+            new_x1 = max(0, min(self.screen_width - (x2-x1), x1 + dx))
+            new_y1 = max(0, min(self.screen_height - (y2-y1), y1 + dy))
+            new_x2 = new_x1 + (x2 - x1)
+            new_y2 = new_y1 + (y2 - y1)
+
+            self.canvas.coords(self.rect, new_x1, new_y1, new_x2, new_y2)
+            self.canvas.coords(self.fill_rect, new_x1, new_y1, new_x2, new_y2)
+
+        elif self.resizing:
+            # Resize based on handle
+            new_x1, new_y1, new_x2, new_y2 = x1, y1, x2, y2
+
+            if 'n' in self.resize_handle:
+                new_y1 = min(y2 - 20, event.y)
+            if 's' in self.resize_handle:
+                new_y2 = max(y1 + 20, event.y)
+            if 'w' in self.resize_handle:
+                new_x1 = min(x2 - 20, event.x)
+            if 'e' in self.resize_handle:
+                new_x2 = max(x1 + 20, event.x)
+
+            # Constrain to screen bounds
+            new_x1 = max(0, new_x1)
+            new_y1 = max(0, new_y1)
+            new_x2 = min(self.screen_width, new_x2)
+            new_y2 = min(self.screen_height, new_y2)
+
+            self.canvas.coords(self.rect, new_x1, new_y1, new_x2, new_y2)
+            self.canvas.coords(self.fill_rect, new_x1, new_y1, new_x2, new_y2)
+
+        self.drag_start_x = event.x
+        self.drag_start_y = event.y
+        self.update_handles()
+        self.update_dimension_display(new_x1, new_y1, new_x2, new_y2)
+
+    def on_adjust_release(self, event):
+        """Handle mouse release in adjustment mode"""
+        self.dragging = False
+        self.resizing = False
+        self.resize_handle = None
+
+    def update_dimension_display(self, x1, y1, x2, y2):
+        """Show region dimensions"""
+        width = abs(x2 - x1)
+        height = abs(y2 - y1)
+
+        if self.dimension_text:
+            self.canvas.delete(self.dimension_text)
+
+        # Display dimensions near the region
+        text_x = (x1 + x2) / 2
+        text_y = min(y1, y2) - 20
+
+        self.dimension_text = self.canvas.create_text(
+            text_x, text_y,
+            text=f"{width} × {height} px",
+            font=('Arial', 14, 'bold'),
+            fill='#1abc9c',
+            tags='dimension'
+        )
+
+    def confirm_selection(self):
+        """Confirm the selected region"""
+        if not self.rect:
+            return
+
+        coords = self.canvas.coords(self.rect)
+        if len(coords) < 4:
+            return
+
+        x1, y1, x2, y2 = coords
+
         self.region = {
-            'top': y1,
-            'left': x1,
-            'width': x2 - x1,
-            'height': y2 - y1
+            'top': int(y1),
+            'left': int(x1),
+            'width': int(x2 - x1),
+            'height': int(y2 - y1)
         }
 
         self.root.destroy()
         if self.callback:
             self.callback(self.region)
+
+    def cancel_selection(self):
+        """Cancel region selection"""
+        self.region = None
+        self.root.destroy()
 
 
 class TriviaVisionAI:
@@ -819,18 +1165,25 @@ class TriviaVisionAI:
 
     def select_region(self):
         """Handle region selection button click"""
-        self.update_status("Please select a region on your screen...")
+        if self.region:
+            self.update_status("Adjust your region: drag to move, drag handles to resize...")
+        else:
+            self.update_status("Draw a rectangle to select the region...")
 
         def region_selected(region):
-            self.region = region
-            self.config['region'] = region
-            self.save_config()
-            self.region_info_label.config(text=self.get_region_info_text())
-            self.screenshot_button.config(state='normal')
-            self.update_status(f"Region selected: {region['width']}x{region['height']} pixels")
-            self.start_preview()
+            if region:  # Only update if region was confirmed (not cancelled)
+                self.region = region
+                self.config['region'] = region
+                self.save_config()
+                self.region_info_label.config(text=self.get_region_info_text())
+                self.screenshot_button.config(state='normal')
+                self.update_status(f"✅ Region selected: {region['width']}x{region['height']} pixels")
+                self.start_preview()
+            else:
+                self.update_status("Region selection cancelled")
 
-        selector = RegionSelector(region_selected)
+        # Pass existing region to allow adjustment
+        selector = RegionSelector(region_selected, initial_region=self.region)
         self.root.after(100, selector.select_region)
 
     def start_preview(self):
