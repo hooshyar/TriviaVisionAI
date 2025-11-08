@@ -8,6 +8,7 @@ import os
 import json
 from io import BytesIO
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     from mss import mss
@@ -16,8 +17,16 @@ except ImportError:
     MSS_AVAILABLE = False
     print("Warning: mss library not available. Install with: pip install mss")
 
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    print("Warning: google-generativeai library not available. Install with: pip install google-generativeai")
+
 CONFIG_FILE = "trivia_config.json"
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "YOUR_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_GEMINI_KEY")
 
 
 class RegionSelector:
@@ -95,8 +104,8 @@ class TriviaVisionAI:
 
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("TriviaVision AI - Desktop Trivia Helper")
-        self.root.geometry("800x700")
+        self.root.title("TriviaVision AI - Desktop Trivia Helper (Parallel AI)")
+        self.root.geometry("1000x850")
         self.root.configure(bg='#2c3e50')
 
         self.region = None
@@ -177,24 +186,74 @@ class TriviaVisionAI:
         )
         self.preview_image_label.pack(expand=True)
 
-        # Status Frame
+        # AI Responses Frame - Split into two columns
+        responses_main_frame = tk.Frame(self.root, bg='#2c3e50')
+        responses_main_frame.pack(fill=tk.BOTH, padx=20, pady=10, expand=True)
+
+        # OpenAI Response Frame (Left)
+        openai_frame = tk.LabelFrame(
+            responses_main_frame,
+            text="🤖 OpenAI (gpt-4o-mini)",
+            font=('Arial', 11, 'bold'),
+            bg='#34495e',
+            fg='#10a37f',
+            padx=10,
+            pady=10
+        )
+        openai_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+
+        self.openai_text = tk.Text(
+            openai_frame,
+            height=8,
+            font=('Arial', 10),
+            bg='#1e2a38',
+            fg='#ecf0f1',
+            wrap=tk.WORD,
+            state='disabled'
+        )
+        self.openai_text.pack(fill=tk.BOTH, expand=True)
+
+        # Gemini Response Frame (Right)
+        gemini_frame = tk.LabelFrame(
+            responses_main_frame,
+            text="✨ Gemini (gemini-2.0-flash-exp)",
+            font=('Arial', 11, 'bold'),
+            bg='#34495e',
+            fg='#4285f4',
+            padx=10,
+            pady=10
+        )
+        gemini_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0))
+
+        self.gemini_text = tk.Text(
+            gemini_frame,
+            height=8,
+            font=('Arial', 10),
+            bg='#1e2a38',
+            fg='#ecf0f1',
+            wrap=tk.WORD,
+            state='disabled'
+        )
+        self.gemini_text.pack(fill=tk.BOTH, expand=True)
+
+        # Combined Status Frame
         status_frame = tk.LabelFrame(
             self.root,
-            text="AI Response",
-            font=('Arial', 12, 'bold'),
+            text="📊 Status",
+            font=('Arial', 11, 'bold'),
             bg='#34495e',
             fg='#ecf0f1',
             padx=10,
             pady=10
         )
-        status_frame.pack(fill=tk.BOTH, padx=20, pady=10)
+        status_frame.pack(fill=tk.X, padx=20, pady=10)
 
         self.status_text = tk.Text(
             status_frame,
-            height=6,
-            font=('Arial', 11),
+            height=2,
+            font=('Arial', 9),
             bg='#1e2a38',
-            fg='#ecf0f1',
+            fg='#95a5a6',
             wrap=tk.WORD,
             state='disabled'
         )
@@ -333,25 +392,44 @@ class TriviaVisionAI:
             messagebox.showwarning("No Region", "Please select a region first!")
             return
 
-        if OPENAI_API_KEY == "YOUR_API_KEY" or not OPENAI_API_KEY:
+        # Check which APIs are available
+        has_openai = OPENAI_API_KEY and OPENAI_API_KEY != "YOUR_API_KEY"
+        has_gemini = GEMINI_AVAILABLE and GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_KEY"
+
+        if not has_openai and not has_gemini:
             messagebox.showerror(
-                "API Key Missing",
-                "Please set your OpenAI API key:\n\n"
-                "1. Set environment variable: OPENAI_API_KEY\n"
-                "2. Or edit the code to add your API key"
+                "API Keys Missing",
+                "Please set at least one API key:\n\n"
+                "OpenAI: export OPENAI_API_KEY='your-key'\n"
+                "Gemini: export GEMINI_API_KEY='your-key'\n\n"
+                "Install Gemini support: pip install google-generativeai"
             )
             return
 
-        self.update_status("📸 Taking screenshot...\n\nPlease wait...")
+        self.update_status("📸 Taking screenshot... Preparing parallel AI analysis...")
         self.screenshot_button.config(state='disabled')
 
         # Run analysis in background thread to keep UI responsive
-        thread = threading.Thread(target=self.analyze_screenshot)
+        thread = threading.Thread(target=self.analyze_screenshot_parallel)
         thread.daemon = True
         thread.start()
 
-    def analyze_screenshot(self):
-        """Capture and analyze screenshot with AI"""
+    def update_openai_text(self, message):
+        """Update OpenAI response text"""
+        self.openai_text.config(state='normal')
+        self.openai_text.delete(1.0, tk.END)
+        self.openai_text.insert(1.0, message)
+        self.openai_text.config(state='disabled')
+
+    def update_gemini_text(self, message):
+        """Update Gemini response text"""
+        self.gemini_text.config(state='normal')
+        self.gemini_text.delete(1.0, tk.END)
+        self.gemini_text.insert(1.0, message)
+        self.gemini_text.config(state='disabled')
+
+    def analyze_screenshot_parallel(self):
+        """Capture and analyze screenshot with multiple AIs in parallel"""
         try:
             # Capture screenshot
             screenshot = self.capture_region(self.region)
@@ -364,13 +442,60 @@ class TriviaVisionAI:
             screenshot_path = os.path.join(save_dir, f"trivia_screenshot_{timestamp}.png")
             screenshot.save(screenshot_path, optimize=True, quality=85)
 
-            self.root.after(0, self.update_status, f"📸 Screenshot saved to {screenshot_path}\n\n🤖 Analyzing with AI...")
+            self.root.after(0, self.update_status, f"📸 Screenshot saved! Running parallel AI analysis...")
+            self.root.after(0, self.update_openai_text, "⏳ Analyzing...")
+            self.root.after(0, self.update_gemini_text, "⏳ Analyzing...")
 
-            # Analyze with AI
-            response_text = self.analyze_image_with_ai(screenshot)
+            # Check which APIs are available
+            has_openai = OPENAI_API_KEY and OPENAI_API_KEY != "YOUR_API_KEY"
+            has_gemini = GEMINI_AVAILABLE and GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_KEY"
 
-            # Update UI with response
-            self.root.after(0, self.update_status, f"✅ AI Response:\n\n{response_text}")
+            # Run parallel queries
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                futures = {}
+
+                if has_openai:
+                    futures['openai'] = executor.submit(self.analyze_with_openai, screenshot)
+
+                if has_gemini:
+                    futures['gemini'] = executor.submit(self.analyze_with_gemini, screenshot)
+
+                # Collect results as they complete
+                results = {}
+                for model_name, future in futures.items():
+                    try:
+                        result = future.result(timeout=30)
+                        results[model_name] = result
+                    except Exception as e:
+                        results[model_name] = {'error': str(e), 'duration': 0}
+
+            # Update UI with results
+            if 'openai' in results:
+                if 'error' in results['openai']:
+                    self.root.after(0, self.update_openai_text, f"❌ Error: {results['openai']['error']}")
+                else:
+                    response = f"⏱️ {results['openai']['duration']:.2f}s\n\n{results['openai']['response']}"
+                    self.root.after(0, self.update_openai_text, response)
+            else:
+                self.root.after(0, self.update_openai_text, "⚠️ API key not configured")
+
+            if 'gemini' in results:
+                if 'error' in results['gemini']:
+                    self.root.after(0, self.update_gemini_text, f"❌ Error: {results['gemini']['error']}")
+                else:
+                    response = f"⏱️ {results['gemini']['duration']:.2f}s\n\n{results['gemini']['response']}"
+                    self.root.after(0, self.update_gemini_text, response)
+            else:
+                self.root.after(0, self.update_gemini_text, "⚠️ API not available")
+
+            # Update status
+            status_msg = "✅ Analysis complete! "
+            if 'openai' in results and 'error' not in results['openai']:
+                status_msg += f"OpenAI: {results['openai']['duration']:.2f}s | "
+            if 'gemini' in results and 'error' not in results['gemini']:
+                status_msg += f"Gemini: {results['gemini']['duration']:.2f}s"
+
+            self.root.after(0, self.update_status, status_msg)
 
         except Exception as e:
             error_msg = f"❌ Error: {str(e)}"
@@ -380,61 +505,94 @@ class TriviaVisionAI:
         finally:
             self.root.after(0, lambda: self.screenshot_button.config(state='normal'))
 
-    def analyze_image_with_ai(self, image):
-        """Send image to OpenAI GPT-4 Vision API for analysis"""
+    def analyze_with_openai(self, image):
+        """Send image to OpenAI GPT-4o-mini API for analysis"""
+        try:
+            # Convert image to base64
+            buffered = BytesIO()
+            image.save(buffered, format="PNG")
+            base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-        # Convert image to base64
-        buffered = BytesIO()
-        image.save(buffered, format="PNG")
-        base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {OPENAI_API_KEY}"
+            }
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {OPENAI_API_KEY}"
-        }
-
-        payload = {
-            "model": "gpt-4o",  # Updated to latest vision model
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "This image contains a trivia question. Please read the question carefully and provide the correct answer. Be concise and direct."
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/png;base64,{base64_image}",
-                                "detail": "high"
+            payload = {
+                "model": "gpt-4o-mini",  # Using fast mini model
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "This image contains a trivia question. Please read the question carefully and provide the correct answer. Be concise and direct with your answer."
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{base64_image}",
+                                    "detail": "high"
+                                }
                             }
-                        }
-                    ]
-                }
-            ],
-            "max_tokens": 500
-        }
+                        ]
+                    }
+                ],
+                "max_tokens": 500
+            }
 
-        start_time = time.time()
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
-        duration = time.time() - start_time
+            start_time = time.time()
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+            duration = time.time() - start_time
 
-        print(f"API response received in {duration:.2f} seconds")
+            print(f"OpenAI response received in {duration:.2f} seconds")
 
-        response_json = response.json()
+            response_json = response.json()
 
-        if 'choices' in response_json and len(response_json['choices']) > 0:
-            content = response_json['choices'][0].get('message', {}).get('content', 'No answer found')
-            return content
-        else:
-            error_msg = response_json.get('error', {}).get('message', 'Unknown error')
-            return f"Error: {error_msg}"
+            if 'choices' in response_json and len(response_json['choices']) > 0:
+                content = response_json['choices'][0].get('message', {}).get('content', 'No answer found')
+                return {'response': content, 'duration': duration}
+            else:
+                error_msg = response_json.get('error', {}).get('message', 'Unknown error')
+                return {'error': error_msg, 'duration': duration}
+
+        except Exception as e:
+            print(f"OpenAI error: {e}")
+            return {'error': str(e), 'duration': 0}
+
+    def analyze_with_gemini(self, image):
+        """Send image to Google Gemini Flash API for analysis"""
+        try:
+            if not GEMINI_AVAILABLE:
+                return {'error': 'Gemini library not installed', 'duration': 0}
+
+            # Configure Gemini
+            genai.configure(api_key=GEMINI_API_KEY)
+
+            # Use the latest flash model
+            model = genai.GenerativeModel('gemini-2.0-flash-exp')
+
+            prompt = "This image contains a trivia question. Please read the question carefully and provide the correct answer. Be concise and direct with your answer."
+
+            start_time = time.time()
+            response = model.generate_content([prompt, image])
+            duration = time.time() - start_time
+
+            print(f"Gemini response received in {duration:.2f} seconds")
+
+            if response.text:
+                return {'response': response.text, 'duration': duration}
+            else:
+                return {'error': 'No response from Gemini', 'duration': duration}
+
+        except Exception as e:
+            print(f"Gemini error: {e}")
+            return {'error': str(e), 'duration': 0}
 
     def run(self):
         """Start the application"""
@@ -443,21 +601,46 @@ class TriviaVisionAI:
 
 def main():
     """Main entry point"""
-    print("=" * 60)
+    print("=" * 70)
     print("TriviaVision AI - Desktop Trivia Screenshot Assistant")
-    print("=" * 60)
+    print("Parallel AI Processing with OpenAI & Google Gemini")
+    print("=" * 70)
     print()
 
+    # Check dependencies
     if not MSS_AVAILABLE:
         print("⚠️  Warning: 'mss' library not found. Install for better performance:")
         print("   pip install mss")
         print()
 
-    if OPENAI_API_KEY == "YOUR_API_KEY":
-        print("⚠️  Warning: OpenAI API key not set!")
+    if not GEMINI_AVAILABLE:
+        print("⚠️  Warning: 'google-generativeai' library not found.")
+        print("   Install for Gemini support: pip install google-generativeai")
+        print()
+
+    # Check API keys
+    has_openai = OPENAI_API_KEY and OPENAI_API_KEY != "YOUR_API_KEY"
+    has_gemini = GEMINI_AVAILABLE and GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_KEY"
+
+    if not has_openai:
+        print("⚠️  OpenAI API key not set!")
         print("   Set environment variable: export OPENAI_API_KEY='your-key-here'")
         print()
 
+    if not has_gemini:
+        print("⚠️  Gemini API key not set!")
+        print("   Set environment variable: export GEMINI_API_KEY='your-key-here'")
+        print()
+
+    if has_openai:
+        print("✅ OpenAI (gpt-4o-mini) ready")
+    if has_gemini:
+        print("✅ Gemini (gemini-2.0-flash-exp) ready")
+
+    if not has_openai and not has_gemini:
+        print("\n❌ No API keys configured! Please set at least one.")
+
+    print()
     app = TriviaVisionAI()
     app.run()
 

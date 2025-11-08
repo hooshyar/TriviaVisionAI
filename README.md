@@ -1,23 +1,27 @@
 # TriviaVision AI - Desktop Trivia Screenshot Assistant
 
-TriviaVision AI is a revolutionary Python desktop application that captures screenshots of trivia questions from your screen and uses OpenAI's GPT-4 Vision AI to provide instant answers.
+TriviaVision AI is a revolutionary Python desktop application that captures screenshots of trivia questions from your screen and uses **parallel AI processing** with both OpenAI and Google Gemini to provide instant answers with multiple perspectives.
 
 ## Features
 
-- **Desktop Screenshot Capture**: Monitor any region of your screen for trivia questions
-- **Interactive Region Selection**: Click and drag to select the area where trivia questions appear
-- **Live Preview**: Real-time preview of the selected screen region (updates every second)
-- **GUI Interface**: User-friendly Tkinter-based interface with intuitive buttons
-- **AI-Powered Analysis**: Leverages OpenAI's GPT-4o Vision model for accurate trivia answers
-- **Configuration Persistence**: Saves your selected region for future sessions
-- **Fast Performance**: Uses `mss` library for optimized screenshot capture
-- **Response Tracking**: Monitors and reports AI response time
+- **🚀 Parallel AI Processing**: Queries both OpenAI and Google Gemini simultaneously for ultra-fast results
+- **🤖 Dual AI Models**: Uses OpenAI's `gpt-4o-mini` and Google's `gemini-2.0-flash-exp` for best speed and accuracy
+- **📸 Desktop Screenshot Capture**: Monitor any region of your screen for trivia questions
+- **🎯 Interactive Region Selection**: Click and drag to select the area where trivia questions appear
+- **👁️ Live Preview**: Real-time preview of the selected screen region (updates every second)
+- **💻 Modern GUI Interface**: User-friendly Tkinter-based interface with side-by-side AI response comparison
+- **⚡ Ultra-Fast Response**: Parallel execution means you get answers in the time it takes for the slowest API
+- **💾 Configuration Persistence**: Saves your selected region for future sessions
+- **📊 Performance Tracking**: Monitors and displays response time for each AI model
+- **🔧 Flexible Setup**: Works with one or both AI providers
 
 ## Installation
 
 ### Prerequisites
 - Python 3.7 or higher
-- OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
+- At least one API key (both recommended for parallel processing):
+  - **OpenAI API key** ([Get one here](https://platform.openai.com/api-keys))
+  - **Google Gemini API key** ([Get one here](https://aistudio.google.com/app/apikey))
 
 ### Steps
 
@@ -32,15 +36,21 @@ cd TriviaVisionAI
 pip install -r requirements.txt
 ```
 
-3. Set your OpenAI API key (choose one method):
+3. Set your API keys (choose one or both):
 
-   **Method 1: Environment Variable (Recommended)**
+   **Method 1: Environment Variables (Recommended)**
    ```bash
-   export OPENAI_API_KEY='your-api-key-here'
+   # For OpenAI (required for OpenAI support)
+   export OPENAI_API_KEY='your-openai-api-key-here'
+
+   # For Gemini (required for Gemini support)
+   export GEMINI_API_KEY='your-gemini-api-key-here'
    ```
 
    **Method 2: Edit the code**
-   Open `TriviaCaptureAI.py` and replace `YOUR_API_KEY` on line 20 with your actual API key.
+   Open `TriviaCaptureAI.py` and replace the placeholder values on lines 28-29.
+
+   **Note**: You can use just one API or both. The app will automatically detect which APIs are configured and use them accordingly.
 
 ## Usage
 
@@ -59,15 +69,27 @@ python TriviaCaptureAI.py
 3. **Monitor and capture:**
    - The app will show a live preview of your selected region
    - When a trivia question appears, click "📸 Take Screenshot & Analyze"
-   - Wait a few seconds for the AI to analyze the image
-   - The answer will appear in the "AI Response" section
+   - Watch as both AI models analyze the image **in parallel**
+   - See responses from both OpenAI and Gemini side-by-side with timing information
+   - Compare answers from both models for better accuracy
 
 4. **Screenshots are automatically saved** to the `captured_images/` directory with timestamps
+
+## Why Parallel AI?
+
+Running multiple AI models simultaneously provides several benefits:
+
+- **⚡ Faster Results**: Get answers in the time it takes for the slowest API (not the sum of both)
+- **🎯 Higher Accuracy**: Compare responses from different models to verify answers
+- **🔄 Redundancy**: If one API is slow or fails, you still get results from the other
+- **💡 Multiple Perspectives**: Different models may provide different insights or explanations
+- **💰 Cost-Effective**: Use the fast, cheap mini/flash models while maintaining quality
 
 ## Dependencies
 
 - **Pillow**: Image processing and manipulation
 - **requests**: HTTP client for OpenAI API calls
+- **google-generativeai**: Google Gemini API client
 - **mss**: Fast cross-platform screenshot library (optional but recommended)
 - **tkinter**: GUI framework (usually included with Python)
 
@@ -80,8 +102,11 @@ The application saves your selected region to `trivia_config.json` automatically
 1. **Region Selection**: Uses a fullscreen transparent Tkinter overlay to let you select any area of your screen
 2. **Live Monitoring**: Continuously captures screenshots of the selected region every second for preview
 3. **Screenshot Capture**: On button click, captures the current frame from the selected region
-4. **AI Analysis**: Sends the screenshot to OpenAI's GPT-4o Vision model with an optimized prompt
-5. **Response Display**: Shows the AI's answer in the application window
+4. **Parallel AI Analysis**:
+   - Simultaneously sends the screenshot to both OpenAI (gpt-4o-mini) and Gemini (gemini-2.0-flash-exp)
+   - Uses Python's `ThreadPoolExecutor` for true parallel execution
+   - Both APIs process the image at the same time, not sequentially
+5. **Response Display**: Shows answers from both models side-by-side with timing information
 
 ## Tips for Best Results
 
@@ -96,13 +121,36 @@ The application saves your selected region to `trivia_config.json` automatically
 - The app will still work using PIL's ImageGrab as a fallback
 - For better performance, install mss: `pip install mss`
 
-**"API Key Missing" error:**
-- Make sure you've set the OPENAI_API_KEY environment variable
-- Or edit line 20 in `TriviaCaptureAI.py` to include your key
+**"google-generativeai library not available" warning:**
+- Gemini support won't be available
+- Install it: `pip install google-generativeai`
+- The app will still work with OpenAI only
+
+**"API Keys Missing" error:**
+- Make sure you've set at least one API key as an environment variable
+- OpenAI: `export OPENAI_API_KEY='your-key'`
+- Gemini: `export GEMINI_API_KEY='your-key'`
+- Or edit lines 28-29 in `TriviaCaptureAI.py`
+
+**Only one AI model showing results:**
+- Check that both API keys are correctly set
+- Verify the library is installed: `pip install google-generativeai`
+- Check the terminal output for any error messages
 
 **Region selection not working:**
 - Make sure you have proper display permissions on your system
 - On macOS, you may need to grant screen recording permissions
+
+## Performance
+
+With parallel processing, you get the best of both worlds:
+
+| Model | Typical Response Time | Cost per 1K tokens |
+|-------|----------------------|-------------------|
+| OpenAI gpt-4o-mini | 1-3 seconds | $0.00015 input, $0.0006 output |
+| Gemini 2.0 Flash | 0.5-2 seconds | Free tier available, then $0.000075 input, $0.0003 output |
+
+**Parallel execution means you wait for the slowest response time, not the sum of both!**
 
 ## Contributing
 
@@ -114,9 +162,11 @@ Contributions are welcome! Feel free to:
 Ideas for improvements:
 - Add keyboard shortcuts for quick screenshot capture
 - Support for multiple saved regions
-- History of captured questions and answers
-- Export answers to a file
-- Integration with other AI models
+- History of captured questions and answers with comparison
+- Export answers to CSV/JSON
+- Add more AI models (Claude, Llama, etc.)
+- Confidence scoring and consensus from multiple models
+- Automatic retry on API failures
 
 ## Disclaimer
 
@@ -132,7 +182,9 @@ This project is open source. Feel free to use and modify as needed.
 ## Credits
 
 Built with:
-- [OpenAI GPT-4o Vision](https://openai.com/)
-- [Pillow](https://python-pillow.org/)
-- [mss](https://python-mss.readthedocs.io/)
-- [Tkinter](https://docs.python.org/3/library/tkinter.html)
+- [OpenAI GPT-4o-mini](https://openai.com/) - Fast vision model
+- [Google Gemini 2.0 Flash](https://ai.google.dev/) - Ultra-fast multimodal AI
+- [Pillow](https://python-pillow.org/) - Image processing
+- [mss](https://python-mss.readthedocs.io/) - Fast screenshots
+- [Tkinter](https://docs.python.org/3/library/tkinter.html) - GUI framework
+- Python's `concurrent.futures` - Parallel execution
