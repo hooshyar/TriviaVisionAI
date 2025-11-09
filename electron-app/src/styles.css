@@ -1,0 +1,295 @@
+/**
+ * TriviaVisionAI - Main Styles
+ * Matching the Python/Tkinter color scheme
+ */
+
+:root {
+  /* Color Scheme (matching Python version) */
+  --bg-primary: #2c3e50;
+  --bg-secondary: #34495e;
+  --accent: #1abc9c;
+  --input-bg: #1e2a38;
+  --text-color: #ecf0f1;
+  --success: #27ae60;
+  --warning: #f39c12;
+  --danger: #e74c3c;
+  --info: #3498db;
+
+  /* Spacing */
+  --spacing-xs: 5px;
+  --spacing-sm: 10px;
+  --spacing-md: 15px;
+  --spacing-lg: 20px;
+
+  /* Border Radius */
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', 'Arial', sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-color);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.app-container {
+  width: 500px;
+  height: 750px;
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-md);
+  gap: var(--spacing-sm);
+}
+
+/* Title Bar */
+.title-bar {
+  background-color: var(--bg-secondary);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.title-bar h1 {
+  font-size: 24px;
+  margin-bottom: var(--spacing-xs);
+  color: var(--accent);
+}
+
+.subtitle {
+  font-size: 12px;
+  color: #95a5a6;
+  margin: 0;
+}
+
+/* Sections */
+.section {
+  background-color: var(--bg-secondary);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+}
+
+.section h3, .section h4 {
+  color: var(--accent);
+  margin-bottom: var(--spacing-sm);
+  font-size: 16px;
+}
+
+/* Preview Section */
+.preview-section {
+  flex-grow: 1;
+  min-height: 150px;
+}
+
+.preview-container {
+  background-color: var(--input-bg);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-md);
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#preview-placeholder {
+  text-align: center;
+  color: #7f8c8d;
+}
+
+#preview-placeholder .hint {
+  font-size: 12px;
+  margin-top: var(--spacing-xs);
+}
+
+#preview-image {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+
+/* Responses Section */
+.responses-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.response-panel {
+  background-color: var(--input-bg);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+}
+
+.response-panel h4 {
+  margin-bottom: var(--spacing-sm);
+  font-size: 14px;
+}
+
+.openai-panel h4 {
+  color: #2ecc71;
+}
+
+.gemini-panel h4 {
+  color: #3498db;
+}
+
+.response-text {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-color);
+  min-height: 60px;
+  max-height: 100px;
+  overflow-y: auto;
+  padding: var(--spacing-sm);
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+}
+
+/* Status Section */
+.status-section {
+  font-size: 13px;
+}
+
+#status-text {
+  color: var(--accent);
+  font-weight: bold;
+}
+
+#region-text {
+  font-family: 'Consolas', monospace;
+  color: var(--text-color);
+}
+
+/* Buttons */
+.buttons-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.btn {
+  padding: 12px 20px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: white;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: var(--info);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #2980b9;
+}
+
+.btn-success {
+  background-color: var(--success);
+}
+
+.btn-success:hover:not(:disabled) {
+  background-color: #229954;
+}
+
+.btn-settings {
+  background-color: #9b59b6;
+}
+
+.btn-settings:hover:not(:disabled) {
+  background-color: #8e44ad;
+}
+
+/* Test Section */
+.test-section {
+  border: 2px dashed var(--accent);
+  background-color: rgba(26, 188, 156, 0.1);
+}
+
+.test-section h4 {
+  color: var(--accent);
+}
+
+.test-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.btn-test {
+  flex: 1;
+  padding: 8px 12px;
+  background-color: var(--accent);
+  font-size: 13px;
+}
+
+.btn-test:hover:not(:disabled) {
+  background-color: #16a085;
+}
+
+.test-results {
+  background-color: var(--input-bg);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm);
+  font-family: 'Consolas', monospace;
+  font-size: 12px;
+  min-height: 60px;
+  max-height: 120px;
+  overflow-y: auto;
+  color: var(--text-color);
+  white-space: pre-wrap;
+}
+
+/* Footer */
+.footer {
+  font-size: 11px;
+  color: #7f8c8d;
+  text-align: center;
+  padding-top: var(--spacing-sm);
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--input-bg);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #16a085;
+}

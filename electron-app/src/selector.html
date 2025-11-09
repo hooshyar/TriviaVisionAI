@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
+  <title>Select Region</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+      cursor: crosshair;
+      font-family: Arial, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #instructions {
+      position: fixed;
+      top: 5%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 15px 30px;
+      border-radius: 8px;
+      text-align: center;
+      font-size: 16px;
+      z-index: 1000;
+      pointer-events: none;
+    }
+
+    #instructions h2 {
+      color: #1abc9c;
+      margin-bottom: 10px;
+      font-size: 20px;
+    }
+
+    #instructions .step {
+      margin: 8px 0;
+    }
+
+    #instructions .key {
+      display: inline-block;
+      background: #34495e;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-family: monospace;
+      font-weight: bold;
+      color: #1abc9c;
+    }
+
+    #dimensions {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.9);
+      color: #1abc9c;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 18px;
+      font-weight: bold;
+      z-index: 1000;
+      pointer-events: none;
+      display: none;
+    }
+
+    /* CRITICAL TEST BANNER */
+    #test-banner {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(231, 76, 60, 0.95);
+      color: white;
+      padding: 30px 40px;
+      border-radius: 12px;
+      border: 3px solid white;
+      text-align: center;
+      z-index: 2000;
+      max-width: 600px;
+      pointer-events: none;
+    }
+
+    #test-banner h1 {
+      font-size: 28px;
+      margin-bottom: 15px;
+    }
+
+    #test-banner p {
+      font-size: 16px;
+      margin: 10px 0;
+      line-height: 1.6;
+    }
+
+    #test-banner .critical {
+      color: #ffe74c;
+      font-weight: bold;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <!-- CRITICAL TEST BANNER -->
+  <div id="test-banner">
+    <h1>🧪 CRITICAL POC TEST</h1>
+    <p class="critical">Did this overlay create a new desktop space on macOS?</p>
+    <p>Check Mission Control (swipe up with 3-4 fingers)</p>
+    <p>Expected: NO (should stay on current desktop)</p>
+    <p>If YES: Migration approach needs adjustment</p>
+    <p style="margin-top: 20px; font-size: 14px;">Press <strong>ESC</strong> to close</p>
+  </div>
+
+  <div id="instructions">
+    <h2>Select Trivia Question Area</h2>
+    <div class="step">Drag to draw a rectangle</div>
+    <div class="step"><span class="key">ENTER</span> to confirm | <span class="key">ESC</span> to cancel</div>
+  </div>
+
+  <div id="dimensions"></div>
+
+  <canvas id="canvas"></canvas>
+
+  <script src="selector.js"></script>
+</body>
+</html>

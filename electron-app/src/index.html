@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
+  <title>TriviaVisionAI</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Title Header -->
+    <div class="title-bar">
+      <h1>📸 TriviaVisionAI</h1>
+      <p class="subtitle">Desktop Screenshot Capture with AI Analysis</p>
+    </div>
+
+    <!-- Live Preview Panel -->
+    <div class="section preview-section">
+      <h3>Live Preview</h3>
+      <div class="preview-container">
+        <div id="preview-placeholder">
+          <p>No region selected yet</p>
+          <p class="hint">Click "Select Region" to choose an area to capture</p>
+        </div>
+        <img id="preview-image" alt="Preview" style="display: none;">
+      </div>
+    </div>
+
+    <!-- AI Responses -->
+    <div class="section responses-section">
+      <div class="response-panel openai-panel">
+        <h4>🤖 OpenAI Response</h4>
+        <div id="openai-response" class="response-text">
+          Waiting for screenshot...
+        </div>
+      </div>
+
+      <div class="response-panel gemini-panel">
+        <h4>✨ Gemini Response</h4>
+        <div id="gemini-response" class="response-text">
+          Waiting for screenshot...
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Display -->
+    <div class="section status-section">
+      <div id="status-display">
+        <strong>Status:</strong> <span id="status-text">Ready</span>
+      </div>
+      <div id="region-info" style="margin-top: 10px;">
+        <strong>Region:</strong> <span id="region-text">Not selected</span>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="section buttons-section">
+      <button id="select-region-btn" class="btn btn-primary">
+        🎯 Select Region
+      </button>
+
+      <button id="screenshot-btn" class="btn btn-success" disabled>
+        📸 Screenshot & Analyze
+      </button>
+
+      <button id="settings-btn" class="btn btn-settings">
+        ⚙️ Settings
+      </button>
+    </div>
+
+    <!-- Test Section (for POC validation) -->
+    <div class="section test-section">
+      <h4>🧪 POC Tests</h4>
+      <div class="test-buttons">
+        <button id="test-display-btn" class="btn btn-test">
+          Test Display Info
+        </button>
+        <button id="test-capture-btn" class="btn btn-test">
+          Test Screen Capture
+        </button>
+      </div>
+      <div id="test-results" class="test-results"></div>
+    </div>
+
+    <!-- Footer Info -->
+    <div class="footer">
+      <div id="platform-info"></div>
+      <div id="version-info"></div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
