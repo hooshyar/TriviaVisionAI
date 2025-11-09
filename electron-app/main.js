@@ -1,74 +1,129 @@
 /**
  * TriviaVisionAI - Electron Main Process
  *
- * This is the main process that manages:
- * - Application lifecycle
- * - Window management
- * - IPC communication
- * - Screen capture
- * - File system operations
+ * Complete migration from Python/Tkinter
+ * Manages application lifecycle, windows, IPC, screen capture, and AI integration
  */
 
-const { app, BrowserWindow, screen, ipcMain, desktopCapturer } = require('electron');
+const { app, BrowserWindow, screen, ipcMain } = require('electron');
 const path = require('path');
-const fs = require('fs').promises;
+
+// Utility modules
+const { configManager, OPENAI_MODELS, GEMINI_MODELS } = require('./utils/config');
+const { screenCapture } = require('./utils/capture');
+const { analyzeParallel, testOpenAIConnection, testGeminiConnection } = require('./utils/ai');
+const logger = require('./utils/logger');
+const { MAIN_WINDOW, PREVIEW } = require('./utils/constants');
 
 // Keep references to prevent garbage collection
 let mainWindow = null;
 let selectorWindow = null;
+let settingsWindow = null;
+let previewTimer = null;
+
+/**
+ * Log application startup
+ */
+function logStartup() {
+  const packageJson = require('./package.json');
+  logger.startup('TriviaVisionAI', packageJson.version);
+  logger.info(`Config file: ${configManager.getPath()}`);
+  logger.info(`Log file: ${logger.getLogPath()}`);
+}
 
 /**
  * Create the main application window
  */
 function createMainWindow() {
-  const startTime = Date.now();
+  logger.info('Creating main window...');
 
-  mainWindow = new BrowserWindow({
-    width: 500,
-    height: 750,
-    x: 0,  // Left edge of screen (like Python version)
-    y: 100,
-    resizable: false,
+  // Get saved window position or use defaults
+  const prefs = configManager.getPreferences();
+  const savedPosition = prefs.windowPosition;
+
+  const windowConfig = {
+    width: savedPosition?.width || MAIN_WINDOW.WIDTH,
+    height: savedPosition?.height || MAIN_WINDOW.HEIGHT,
+    minWidth: MAIN_WINDOW.MIN_WIDTH,
+    minHeight: MAIN_WINDOW.MIN_HEIGHT,
+    x: savedPosition?.x !== undefined ? savedPosition.x : 20,  // Left edge
+    y: savedPosition?.y !== undefined ? savedPosition.y : 100,
     backgroundColor: '#2c3e50',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     },
-    title: 'TriviaVisionAI'
-  });
+    title: 'TriviaVisionAI',
+    show: false  // Show after ready to prevent flicker
+  };
+
+  mainWindow = new BrowserWindow(windowConfig);
 
   mainWindow.loadFile('src/index.html');
+
+  // Show when ready
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    logger.info('Main window ready');
+  });
 
   // Open DevTools in development
   if (process.argv.includes('--enable-logging')) {
     mainWindow.webContents.openDevTools();
   }
 
+  // Save window position on move/resize
+  mainWindow.on('moved', saveWindowPosition);
+  mainWindow.on('resized', saveWindowPosition);
+
   mainWindow.on('closed', () => {
     mainWindow = null;
+    stopPreview();
   });
 
-  const loadTime = Date.now() - startTime;
-  console.log(`[Main] Window created in ${loadTime}ms`);
+  // Always on top if configured
+  if (prefs.alwaysOnTop) {
+    mainWindow.setAlwaysOnTop(true);
+  }
 
   // Log display information
   logDisplayInfo();
+
+  // Start preview if region is configured
+  const region = configManager.getRegion();
+  if (region && prefs.previewEnabled) {
+    startPreview();
+  }
+}
+
+/**
+ * Save window position to config
+ */
+function saveWindowPosition() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const bounds = mainWindow.getBounds();
+    configManager.updatePreferences({
+      windowPosition: {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height
+      }
+    });
+  }
 }
 
 /**
  * Create the region selector overlay window
- * CRITICAL: This must NOT create a new desktop space on macOS
  */
 function createSelectorWindow() {
-  console.log('[Selector] Creating fullscreen overlay...');
-  console.log('[Selector] CRITICAL TEST: Does this create new desktop space on macOS?');
+  logger.info('Creating region selector overlay...');
 
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.workAreaSize;
 
-  // APPROACH 1: Use 'panel' type for overlay that floats on all spaces
-  // This is the recommended approach for overlays on macOS
+  // Use 'panel' type for overlay that doesn't create desktop space
   selectorWindow = new BrowserWindow({
     width: width,
     height: height,
@@ -83,8 +138,7 @@ function createSelectorWindow() {
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
-    // CRITICAL: Use 'panel' type to avoid desktop space creation
-    type: 'panel',
+    type: 'panel',  // CRITICAL for macOS
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -92,33 +146,61 @@ function createSelectorWindow() {
     }
   });
 
-  // Load the selector UI
   selectorWindow.loadFile('src/selector.html');
 
-  // Make it visible on all workspaces (critical for macOS)
+  // Make visible on all workspaces
   selectorWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-
-  // Set to highest z-order level
   selectorWindow.setAlwaysOnTop(true, 'screen-saver');
 
   selectorWindow.on('closed', () => {
     selectorWindow = null;
-    console.log('[Selector] Window closed');
+    logger.info('Selector window closed');
   });
 
-  console.log('[Selector] Window created with type: panel');
-  console.log('[Selector] visibleOnAllWorkspaces: true');
-  console.log('[Selector] alwaysOnTop level: screen-saver');
+  logger.info('Selector window created (type: panel)');
 }
 
 /**
  * Close the selector window
  */
 function closeSelectorWindow() {
-  if (selectorWindow) {
+  if (selectorWindow && !selectorWindow.isDestroyed()) {
     selectorWindow.close();
     selectorWindow = null;
   }
+}
+
+/**
+ * Create settings dialog window
+ */
+function createSettingsWindow() {
+  logger.info('Creating settings window...');
+
+  settingsWindow = new BrowserWindow({
+    width: 700,
+    height: 650,
+    parent: mainWindow,
+    modal: true,
+    show: false,
+    backgroundColor: '#2c3e50',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    },
+    title: 'Settings'
+  });
+
+  settingsWindow.loadFile('src/settings.html');
+
+  settingsWindow.once('ready-to-show', () => {
+    settingsWindow.show();
+  });
+
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+    logger.info('Settings window closed');
+  });
 }
 
 /**
@@ -128,77 +210,68 @@ function logDisplayInfo() {
   const primaryDisplay = screen.getPrimaryDisplay();
   const allDisplays = screen.getAllDisplays();
 
-  console.log('[Display] Primary Display Info:');
-  console.log(`  - Size: ${primaryDisplay.size.width}x${primaryDisplay.size.height}`);
-  console.log(`  - Work Area: ${primaryDisplay.workAreaSize.width}x${primaryDisplay.workAreaSize.height}`);
-  console.log(`  - Scale Factor: ${primaryDisplay.scaleFactor}x`);
-  console.log(`  - Retina Display: ${primaryDisplay.scaleFactor === 2 ? 'YES' : 'NO'}`);
-  console.log(`[Display] Total Displays: ${allDisplays.length}`);
+  logger.info('Display Information:');
+  logger.info(`  Size: ${primaryDisplay.size.width}x${primaryDisplay.size.height}`);
+  logger.info(`  Work Area: ${primaryDisplay.workAreaSize.width}x${primaryDisplay.workAreaSize.height}`);
+  logger.info(`  Scale Factor: ${primaryDisplay.scaleFactor}x`);
+  logger.info(`  Retina: ${primaryDisplay.scaleFactor > 1 ? 'YES' : 'NO'}`);
+  logger.info(`  Total Displays: ${allDisplays.length}`);
 }
 
 /**
- * Capture screenshot of a specific region
+ * Start live preview
  */
-async function captureRegion(region) {
-  console.log('[Capture] Starting screen capture...');
-  console.log(`[Capture] Region: ${region.left},${region.top} ${region.width}x${region.height}`);
+function startPreview() {
+  if (previewTimer) {
+    logger.debug('Preview already running');
+    return;
+  }
 
-  try {
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const scaleFactor = primaryDisplay.scaleFactor;
+  const region = configManager.getRegion();
+  if (!region) {
+    logger.warn('Cannot start preview: no region configured');
+    return;
+  }
 
-    console.log(`[Capture] Scale factor: ${scaleFactor}x`);
+  const prefs = configManager.getPreferences();
+  const interval = prefs.previewInterval || PREVIEW.INTERVAL;
 
-    // Get desktop sources
-    const sources = await desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: {
-        width: primaryDisplay.size.width * scaleFactor,
-        height: primaryDisplay.size.height * scaleFactor
+  logger.info(`Starting preview (${interval}ms interval)`);
+
+  previewTimer = setInterval(async () => {
+    try {
+      // Capture region
+      const imageBuffer = await screenCapture.captureRegion(region);
+
+      // Resize for preview
+      const previewBuffer = await screenCapture.resizeForPreview(
+        imageBuffer,
+        PREVIEW.MAX_WIDTH,
+        PREVIEW.MAX_HEIGHT
+      );
+
+      // Send to renderer
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('preview-update', {
+          image: previewBuffer.toString('base64'),
+          region: region
+        });
       }
-    });
-
-    if (sources.length === 0) {
-      throw new Error('No screen sources available. Check Screen Recording permissions.');
+    } catch (error) {
+      logger.error('Preview error:', error);
+      // Don't stop preview on error - might be temporary
     }
+  }, interval);
+}
 
-    console.log(`[Capture] Found ${sources.length} screen source(s)`);
-
-    // Get the screenshot as a NativeImage
-    const screenshot = sources[0].thumbnail;
-    const size = screenshot.getSize();
-
-    console.log(`[Capture] Captured size: ${size.width}x${size.height}`);
-
-    // Convert to PNG buffer
-    const imageBuffer = screenshot.toPNG();
-
-    // For now, return the full screenshot
-    // TODO: Crop to exact region using Sharp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `trivia_screenshot_${timestamp}.png`;
-    const filepath = path.join(__dirname, '..', 'captured_images', filename);
-
-    // Ensure directory exists
-    await fs.mkdir(path.join(__dirname, '..', 'captured_images'), { recursive: true });
-
-    // Save screenshot
-    await fs.writeFile(filepath, imageBuffer);
-
-    console.log(`[Capture] Saved to: ${filepath}`);
-
-    return {
-      success: true,
-      filepath: filepath,
-      size: size,
-      scaleFactor: scaleFactor
-    };
-  } catch (error) {
-    console.error('[Capture] Error:', error.message);
-    return {
-      success: false,
-      error: error.message
-    };
+/**
+ * Stop live preview
+ */
+function stopPreview() {
+  if (previewTimer) {
+    clearInterval(previewTimer);
+    previewTimer = null;
+    logger.info('Preview stopped');
   }
 }
 
@@ -206,43 +279,303 @@ async function captureRegion(region) {
  * IPC Handlers
  */
 
-// Open region selector
+// ===== Window Management =====
+
 ipcMain.handle('open-selector', () => {
-  console.log('[IPC] open-selector called');
+  logger.info('[IPC] open-selector');
   createSelectorWindow();
+  return { success: true };
 });
 
-// Close region selector
 ipcMain.handle('close-selector', () => {
-  console.log('[IPC] close-selector called');
+  logger.info('[IPC] close-selector');
   closeSelectorWindow();
+  return { success: true };
 });
 
-// Test screen capture
-ipcMain.handle('test-capture', async () => {
-  console.log('[IPC] test-capture called');
-
-  // Capture full screen as test
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const testRegion = {
-    left: 0,
-    top: 0,
-    width: primaryDisplay.size.width,
-    height: primaryDisplay.size.height
-  };
-
-  return await captureRegion(testRegion);
+ipcMain.handle('open-settings', () => {
+  logger.info('[IPC] open-settings');
+  if (!settingsWindow) {
+    createSettingsWindow();
+  } else {
+    settingsWindow.focus();
+  }
+  return { success: true };
 });
 
-// Get display info
-ipcMain.handle('get-display-info', () => {
-  const primaryDisplay = screen.getPrimaryDisplay();
+ipcMain.handle('close-settings', () => {
+  logger.info('[IPC] close-settings');
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.close();
+  }
+  return { success: true };
+});
+
+// ===== Configuration Management =====
+
+ipcMain.handle('get-config', () => {
+  logger.debug('[IPC] get-config');
   return {
-    size: primaryDisplay.size,
-    workAreaSize: primaryDisplay.workAreaSize,
-    scaleFactor: primaryDisplay.scaleFactor,
-    isRetina: primaryDisplay.scaleFactor === 2
+    success: true,
+    config: configManager.getAll()
   };
+});
+
+ipcMain.handle('set-config', (event, updates) => {
+  logger.info('[IPC] set-config', Object.keys(updates));
+  const success = configManager.update(updates);
+  return { success };
+});
+
+ipcMain.handle('get-api-keys', () => {
+  logger.debug('[IPC] get-api-keys');
+  return {
+    success: true,
+    api_keys: configManager.getApiKeys()
+  };
+});
+
+ipcMain.handle('set-api-keys', (event, keys) => {
+  logger.info('[IPC] set-api-keys');
+  const success = configManager.setApiKeys(keys);
+  return { success };
+});
+
+ipcMain.handle('get-models', () => {
+  logger.debug('[IPC] get-models');
+  return {
+    success: true,
+    models: configManager.getModels(),
+    available: {
+      openai: OPENAI_MODELS,
+      gemini: GEMINI_MODELS
+    }
+  };
+});
+
+ipcMain.handle('set-models', (event, models) => {
+  logger.info('[IPC] set-models', models);
+  const success = configManager.setModels(models);
+  return { success };
+});
+
+ipcMain.handle('get-prompt', () => {
+  logger.debug('[IPC] get-prompt');
+  return {
+    success: true,
+    prompt: configManager.getPrompt()
+  };
+});
+
+ipcMain.handle('set-prompt', (event, prompt) => {
+  logger.info('[IPC] set-prompt');
+  const success = configManager.setPrompt(prompt);
+  return { success };
+});
+
+ipcMain.handle('get-region', () => {
+  logger.debug('[IPC] get-region');
+  return {
+    success: true,
+    region: configManager.getRegion()
+  };
+});
+
+ipcMain.handle('set-region', (event, region) => {
+  logger.regionSelected(region);
+  const success = configManager.setRegion(region);
+
+  // Restart preview if enabled
+  const prefs = configManager.getPreferences();
+  if (success && region && prefs.previewEnabled) {
+    stopPreview();
+    startPreview();
+  }
+
+  return { success };
+});
+
+// ===== Preview Management =====
+
+ipcMain.handle('start-preview', () => {
+  logger.info('[IPC] start-preview');
+  startPreview();
+  return { success: true };
+});
+
+ipcMain.handle('stop-preview', () => {
+  logger.info('[IPC] stop-preview');
+  stopPreview();
+  return { success: true };
+});
+
+// ===== Screen Capture =====
+
+ipcMain.handle('get-display-info', () => {
+  logger.debug('[IPC] get-display-info');
+  try {
+    const displayInfo = screenCapture.getDisplayInfo();
+    return {
+      success: true,
+      displayInfo
+    };
+  } catch (error) {
+    logger.error('Failed to get display info:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('capture-screenshot', async () => {
+  logger.info('[IPC] capture-screenshot');
+
+  const region = configManager.getRegion();
+  if (!region) {
+    return {
+      success: false,
+      error: 'No region configured'
+    };
+  }
+
+  try {
+    const result = await screenCapture.captureAndSave(region);
+    return result;
+  } catch (error) {
+    logger.error('Screenshot capture failed:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('test-capture', async () => {
+  logger.info('[IPC] test-capture');
+
+  try {
+    // Capture full screen as test
+    const displayInfo = screenCapture.getDisplayInfo();
+    const testRegion = {
+      left: 0,
+      top: 0,
+      width: displayInfo.size.width * displayInfo.scaleFactor,
+      height: displayInfo.size.height * displayInfo.scaleFactor
+    };
+
+    const result = await screenCapture.captureAndSave(testRegion, 'test_capture.png');
+    return result;
+  } catch (error) {
+    logger.error('Test capture failed:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+// ===== AI Integration =====
+
+ipcMain.handle('analyze-screenshot', async () => {
+  logger.info('[IPC] analyze-screenshot');
+
+  const region = configManager.getRegion();
+  if (!region) {
+    return {
+      success: false,
+      error: 'No region configured'
+    };
+  }
+
+  const config = configManager.getAll();
+  if (!configManager.hasAnyAI()) {
+    return {
+      success: false,
+      error: 'No AI API keys configured'
+    };
+  }
+
+  try {
+    // Capture screenshot first
+    const captureResult = await screenCapture.captureAndSave(region);
+    if (!captureResult.success) {
+      return {
+        success: false,
+        error: 'Screenshot capture failed: ' + captureResult.error
+      };
+    }
+
+    // Read the saved image
+    const fs = require('fs').promises;
+    const imageBuffer = await fs.readFile(captureResult.filepath);
+
+    // Analyze with both AIs in parallel
+    const results = await analyzeParallel(imageBuffer, config);
+
+    return {
+      success: true,
+      filepath: captureResult.filepath,
+      results: results
+    };
+  } catch (error) {
+    logger.error('Screenshot analysis failed:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('test-openai-connection', async (event, apiKey) => {
+  logger.info('[IPC] test-openai-connection');
+
+  try {
+    const result = await testOpenAIConnection(apiKey);
+    return result;
+  } catch (error) {
+    logger.error('OpenAI connection test failed:', error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+});
+
+ipcMain.handle('test-gemini-connection', async (event, apiKey) => {
+  logger.info('[IPC] test-gemini-connection');
+
+  try {
+    const result = await testGeminiConnection(apiKey);
+    return result;
+  } catch (error) {
+    logger.error('Gemini connection test failed:', error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+});
+
+// ===== Utility Handlers =====
+
+ipcMain.handle('check-permissions', async () => {
+  logger.info('[IPC] check-permissions');
+
+  try {
+    const hasPermissions = await screenCapture.checkPermissions();
+    return {
+      success: true,
+      hasPermissions: hasPermissions
+    };
+  } catch (error) {
+    logger.error('Permission check failed:', error);
+    return {
+      success: false,
+      hasPermissions: false,
+      error: error.message
+    };
+  }
 });
 
 /**
@@ -250,15 +583,7 @@ ipcMain.handle('get-display-info', () => {
  */
 
 app.whenReady().then(() => {
-  console.log('='.repeat(60));
-  console.log('TriviaVisionAI - Electron Version');
-  console.log('='.repeat(60));
-  console.log(`[App] Electron Version: ${process.versions.electron}`);
-  console.log(`[App] Chrome Version: ${process.versions.chrome}`);
-  console.log(`[App] Node Version: ${process.versions.node}`);
-  console.log(`[App] Platform: ${process.platform}`);
-  console.log('='.repeat(60));
-
+  logStartup();
   createMainWindow();
 
   app.on('activate', () => {
@@ -269,22 +594,26 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  stopPreview();
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
-// Graceful shutdown
 app.on('before-quit', () => {
-  console.log('[App] Shutting down...');
+  logger.info('Shutting down...');
+  stopPreview();
   closeSelectorWindow();
+  if (settingsWindow) {
+    settingsWindow.close();
+  }
 });
 
 // Handle uncaught errors
 process.on('uncaughtException', (error) => {
-  console.error('[Error] Uncaught Exception:', error);
+  logger.error('Uncaught Exception:', error);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('[Error] Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error('Unhandled Rejection:', reason);
 });

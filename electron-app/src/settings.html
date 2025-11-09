@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - TriviaVisionAI</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <div class="settings-container">
+    <!-- Header -->
+    <div class="settings-header">
+      <h1>⚙️ Settings</h1>
+      <p class="subtitle">Configure API keys, models, and prompts</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-button active" data-tab="api-keys">🔑 API Keys</button>
+      <button class="tab-button" data-tab="models">🤖 Models</button>
+      <button class="tab-button" data-tab="prompt">💬 Prompt</button>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content-container">
+
+      <!-- API Keys Tab -->
+      <div class="tab-content active" id="api-keys-tab">
+        <div class="section">
+          <h2>OpenAI API Key</h2>
+          <p class="help-text">Get your key from: <a href="https://platform.openai.com/api-keys" target="_blank">https://platform.openai.com/api-keys</a></p>
+
+          <div class="input-group">
+            <input type="password" id="openai-key" class="api-key-input" placeholder="sk-...">
+            <button class="btn-secondary" id="toggle-openai">👁️ Show</button>
+            <button class="btn-test" id="test-openai">🧪 Test</button>
+          </div>
+          <div class="test-result" id="openai-test-result"></div>
+        </div>
+
+        <div class="section">
+          <h2>Google Gemini API Key</h2>
+          <p class="help-text">Get your key from: <a href="https://aistudio.google.com/app/apikey" target="_blank">https://aistudio.google.com/app/apikey</a></p>
+
+          <div class="input-group">
+            <input type="password" id="gemini-key" class="api-key-input" placeholder="AIza...">
+            <button class="btn-secondary" id="toggle-gemini">👁️ Show</button>
+            <button class="btn-test" id="test-gemini">🧪 Test</button>
+          </div>
+          <div class="test-result" id="gemini-test-result"></div>
+        </div>
+      </div>
+
+      <!-- Models Tab -->
+      <div class="tab-content" id="models-tab">
+        <div class="section">
+          <h2>OpenAI Model</h2>
+          <p class="help-text">Recommended: gpt-4o-mini (fast and cost-effective)</p>
+
+          <select id="openai-model" class="model-select">
+            <option value="gpt-4o">gpt-4o (Latest, best quality)</option>
+            <option value="gpt-4o-mini">gpt-4o-mini (Fast & cheap)</option>
+            <option value="gpt-4-turbo">gpt-4-turbo</option>
+            <option value="gpt-4">gpt-4</option>
+          </select>
+        </div>
+
+        <div class="section">
+          <h2>Gemini Model</h2>
+          <p class="help-text">Recommended: gemini-2.0-flash-exp (fastest experimental)</p>
+
+          <select id="gemini-model" class="model-select">
+            <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp (Latest, fastest)</option>
+            <option value="gemini-1.5-flash">gemini-1.5-flash (Stable)</option>
+            <option value="gemini-1.5-flash-8b">gemini-1.5-flash-8b (Smaller)</option>
+            <option value="gemini-1.5-pro">gemini-1.5-pro (Best quality)</option>
+          </select>
+        </div>
+
+        <div class="section info-box">
+          <h3>💡 Model Comparison</h3>
+          <ul>
+            <li><strong>gpt-4o:</strong> Best quality, slower, more expensive</li>
+            <li><strong>gpt-4o-mini:</strong> Great balance (recommended)</li>
+            <li><strong>gemini-2.0-flash-exp:</strong> Experimental, fastest</li>
+            <li><strong>gemini-1.5-pro:</strong> Best Gemini quality</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Prompt Tab -->
+      <div class="tab-content" id="prompt-tab">
+        <div class="section">
+          <h2>AI Prompt</h2>
+          <p class="help-text">This prompt is sent to both AI models along with the screenshot</p>
+
+          <textarea id="prompt-text" class="prompt-textarea" rows="8"></textarea>
+
+          <div class="template-buttons">
+            <h3>Quick Templates:</h3>
+            <button class="btn-template" data-template="default">Default</button>
+            <button class="btn-template" data-template="detailed">Detailed</button>
+            <button class="btn-template" data-template="quick">Quick</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer Buttons -->
+    <div class="settings-footer">
+      <button class="btn-success" id="save-btn">💾 Save Settings</button>
+      <button class="btn-cancel" id="cancel-btn">❌ Cancel</button>
+    </div>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>
